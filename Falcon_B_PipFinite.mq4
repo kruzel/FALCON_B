@@ -3,10 +3,10 @@
 //|                                        Copyright 2015,Lucas Liew 
 //|                                  lucas@blackalgotechnologies.com 
 //+------------------------------------------------------------------+
-#include "Include/01_GetHistoryOrder.mqh"
-#include "Include/02_OrderProfitToCSV.mqh"
-#include "Include/03_ReadCommandFromCSV.mqh"
-#include "Include/08_TerminalNumber.mqh"
+#include <Falcon_B/01_GetHistoryOrder.mqh>
+#include <Falcon_B/02_OrderProfitToCSV.mqh>
+#include <Falcon_B/03_ReadCommandFromCSV.mqh>
+#include <Falcon_B/08_TerminalNumber.mqh>
 
 #property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
 #property copyright "Copyright 2018, Vladimir Zhbanko"
