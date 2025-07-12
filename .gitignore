@@ -9,6 +9,7 @@
 /Images/
 /Files/
 /Indicators/
+/Include/
 /Presets
 **/*.ex4
 **/*.log

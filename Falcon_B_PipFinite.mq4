@@ -30,7 +30,7 @@ extern int     TerminalType                     = 1;         //0 mean slave, 1 m
 extern bool    R_Management                     = true;      //R_Management true will enable Decision Support Centre (using R)
 extern int     Slippage                         = 3; // In Pips
 extern bool    IsECNbroker                      = false; // Is your broker an ECN
-extern bool    OnJournaling                     = true; // Add EA updates in the Journal Tab
+extern bool    VerboseJournaling                = true; // Add EA updates in the Journal Tab
 
 extern string  Header2="----------Trading Rules Variables-----------";
 extern int     PipFinite_Period                 = 3;       // PipFinite Trend PRO Period
@@ -38,6 +38,12 @@ extern double  PipFinite_TargetFactor           = 2.0;     // PipFinite Trend PR
 extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PRO Maximum History Bars
 extern int     PipFinite_UptrendBuffer          = 10;       // PipFinite Uptrend Buffer Number
 extern int     PipFinite_DowntrendBuffer        = 11;       // PipFinite Downtrend Buffer Number
+
+extern string  Header2b="----------ZigZag Indicator Settings-----------";
+extern int     ZigZag_Depth                     = 12;      // ZigZag Depth
+extern int     ZigZag_Deviation                 = 5;       // ZigZag Deviation  
+extern int     ZigZag_Backstep                  = 3;       // ZigZag Backstep
+extern double  SupportResistanceThreshold      = 10.0;    // Distance in pips to consider close to S/R level
 
 extern string  Header3="----------Position Sizing Settings-----------";
 extern string  Lot_explanation                  = "If IsSizingOn = true, Lots variable will be ignored";
@@ -128,6 +134,9 @@ double Price1;
 double PipFiniteUptrendSignal1, PipFiniteDowntrendSignal1;
 int CrossTriggered;
 
+// ZigZag Variables
+double ZigZagHighs, ZigZagLows;
+
 int OrderNumber;
 double HiddenSLList[][2]; // First dimension is for position ticket numbers, second is for the SL Levels
 double HiddenTPList[][2]; // First dimension is for position ticket numbers, second is for the TP Levels
@@ -153,6 +162,30 @@ int init()
 // Write file to the sandbox if it's does not exist
 //    
    ReferenceTime = TimeCurrent(); // record time for order history function
+   
+   // Check if terminal.csv file exists
+   int testHandle = FileOpen("terminal.csv", FILE_READ);
+   if(testHandle == -1)
+     {
+      if(VerboseJournaling) Print("EA Journaling: terminal.csv file does not exist, creating it...");
+      // Create the file
+      testHandle = FileOpen("terminal.csv", FILE_WRITE|FILE_CSV);
+      if(testHandle != -1)
+        {
+         FileWrite(testHandle, "1");
+         FileClose(testHandle);
+         if(VerboseJournaling) Print("EA Journaling: terminal.csv file created successfully");
+        }
+      else
+        {
+         if(VerboseJournaling) Print("EA Journaling: Failed to create terminal.csv file");
+        }
+     }
+   else
+     {
+      FileClose(testHandle);
+      if(VerboseJournaling) Print("EA Journaling: terminal.csv file exists and is accessible");
+     }
    
    //write file system control to enable initial trading
    TradeAllowed = ReadCommandFromCSV(MagicNumber);
@@ -213,7 +246,9 @@ int start()
      {
          //code that only executed once a bar
       //   Direction = -1; //set direction to -1 by default in order to achieve cross!
-         OrderProfitToCSV(T_Num());                        //write previous orders profit results for auto analysis in R
+         int terminalNum = T_Num();
+        //  if(VerboseJournaling) Print("EA Journaling: Terminal Number retrieved: " + string(terminalNum));
+         OrderProfitToCSV(terminalNum);                        //write previous orders profit results for auto analysis in R
          TradeAllowed = ReadCommandFromCSV(MagicNumber);              //read command from R to make sure trading is allowed
       //   Direction = ReadAutoPrediction(MagicNumber, -1);             //get prediction from R for trade direction         
         
@@ -237,6 +272,10 @@ int start()
       // Get PipFinite indicator values with proper parameters
       PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
       PipFiniteDowntrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_DowntrendBuffer, 1); // Buffer for Downtrend, Shift 1
+      
+      // Get ZigZag indicator values directly from buffers
+      ZigZagHighs = iCustom(NULL, 0, "ZigZag", ZigZag_Depth, ZigZag_Deviation, ZigZag_Backstep, 1, 1); // Buffer 1 for Highs
+      ZigZagLows = iCustom(NULL, 0, "ZigZag", ZigZag_Depth, ZigZag_Deviation, ZigZag_Backstep, 2, 1);  // Buffer 2 for Lows
       
       // Calculate entry signals using Close[2] and Close[1] for crossing logic
       // Use main trend line - choose uptrend or downtrend based on which has valid data
@@ -272,82 +311,94 @@ int start()
       Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,P);
      }
 
-   if(UseBreakevenStops) BreakevenStopAll(OnJournaling,RetryInterval,BreakevenBuffer,MagicNumber,P);
-   if(UseTrailingStops) TrailingStopAll(OnJournaling,TrailingStopDistance,TrailingStopBuffer,RetryInterval,MagicNumber,P);
+   if(UseBreakevenStops) BreakevenStopAll(VerboseJournaling,RetryInterval,BreakevenBuffer,MagicNumber,P);
+   if(UseTrailingStops) TrailingStopAll(VerboseJournaling,TrailingStopDistance,TrailingStopBuffer,RetryInterval,MagicNumber,P);
    if(UseVolTrailingStops) {
-      UpdateVolTrailingList(OnJournaling,RetryInterval,MagicNumber);
-      ReviewVolTrailingStop(OnJournaling,VolTrailingDistMultiplier,VolTrailingBuffMultiplier,RetryInterval,MagicNumber,P);
+      UpdateVolTrailingList(VerboseJournaling,RetryInterval,MagicNumber);
+      ReviewVolTrailingStop(VerboseJournaling,VolTrailingDistMultiplier,VolTrailingBuffMultiplier,RetryInterval,MagicNumber,P);
    }
 //----------(Hidden) TP, SL, Breakeven and Trailing Stops Variables-----------  
 
-   if(UseHiddenStopLoss) TriggerStopLossHidden(OnJournaling,RetryInterval,MagicNumber,Slippage,P);
-   if(UseHiddenTakeProfit) TriggerTakeProfitHidden(OnJournaling,RetryInterval,MagicNumber,Slippage,P);
+   if(UseHiddenStopLoss) TriggerStopLossHidden(VerboseJournaling,RetryInterval,MagicNumber,Slippage,P);
+   if(UseHiddenTakeProfit) TriggerTakeProfitHidden(VerboseJournaling,RetryInterval,MagicNumber,Slippage,P);
    if(UseHiddenBreakevenStops) { 
-      UpdateHiddenBEList(OnJournaling,RetryInterval,MagicNumber);
-      SetAndTriggerBEHidden(OnJournaling,BreakevenBuffer,MagicNumber,Slippage,P,RetryInterval);
+      UpdateHiddenBEList(VerboseJournaling,RetryInterval,MagicNumber);
+      SetAndTriggerBEHidden(VerboseJournaling,BreakevenBuffer,MagicNumber,Slippage,P,RetryInterval);
    }
    if(UseHiddenTrailingStops) {
-      UpdateHiddenTrailingList(OnJournaling,RetryInterval,MagicNumber);
-      SetAndTriggerHiddenTrailing(OnJournaling,TrailingStopDistance_Hidden,TrailingStopBuffer_Hidden,Slippage,RetryInterval,MagicNumber,P);
+      UpdateHiddenTrailingList(VerboseJournaling,RetryInterval,MagicNumber);
+      SetAndTriggerHiddenTrailing(VerboseJournaling,TrailingStopDistance_Hidden,TrailingStopBuffer_Hidden,Slippage,RetryInterval,MagicNumber,P);
    }
    if(UseHiddenVolTrailing) {
-      UpdateHiddenVolTrailingList(OnJournaling,RetryInterval,MagicNumber);
-      TriggerAndReviewHiddenVolTrailing(OnJournaling,VolTrailingDistMultiplier_Hidden,VolTrailingBuffMultiplier_Hidden,Slippage,RetryInterval,MagicNumber,P);
+      UpdateHiddenVolTrailingList(VerboseJournaling,RetryInterval,MagicNumber);
+      TriggerAndReviewHiddenVolTrailing(VerboseJournaling,VolTrailingDistMultiplier_Hidden,VolTrailingBuffMultiplier_Hidden,Slippage,RetryInterval,MagicNumber,P);
    }
 
 //----------Exit Rules (All Opened Positions)-----------
 
    // TDL 2: Setting up Exit rules. Modify the ExitSignal() function to suit your needs.
 
-   if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(CrossTriggered)==2)
+   int exitSignal = ExitSignal(CrossTriggered);
+   
+   if(CountPosOrders(MagicNumber,OP_BUY)>=1 && exitSignal==2)
      { // Close Long Positions
-      CloseOrderPosition(OP_BUY, OnJournaling, MagicNumber, Slippage, P, RetryInterval); 
-
+      if(VerboseJournaling) 
+        {
+         int buyPositions = CountPosOrders(MagicNumber,OP_BUY);
+         Print("EA Journaling: Closing " + string(buyPositions) + " BUY position(s) due to exit signal");
+        }
+      CloseOrderPosition(OP_BUY, VerboseJournaling, MagicNumber, Slippage, P, RetryInterval); 
      }
-   if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ExitSignal(CrossTriggered)==1)
+     
+   if(CountPosOrders(MagicNumber,OP_SELL)>=1 && exitSignal==1)
      { // Close Short Positions
-      CloseOrderPosition(OP_SELL, OnJournaling, MagicNumber, Slippage, P, RetryInterval);
+      if(VerboseJournaling) 
+        {
+         int sellPositions = CountPosOrders(MagicNumber,OP_SELL);
+         Print("EA Journaling: Closing " + string(sellPositions) + " SELL position(s) due to exit signal");
+        }
+      CloseOrderPosition(OP_SELL, VerboseJournaling, MagicNumber, Slippage, P, RetryInterval);
      }
 
 //----------Entry Rules (Market and Pending) -----------
 
-   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(CrossTriggered))==False) 
+   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,VerboseJournaling,EntrySignal(CrossTriggered))==False) 
       if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
-         if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==False)
+         if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,VerboseJournaling)==False)
            {
             if(TradeAllowed && EntrySignal(CrossTriggered)==1)
               { // Open Long Positions based on PipFinite Buy signal
-               OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+               OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,VerboseJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
    
                // Set Stop Loss value for Hidden SL
-               if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,P,OrderNumber);
+               if(UseHiddenStopLoss) SetStopLossHidden(VerboseJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,P,OrderNumber);
    
                // Set Take Profit value for Hidden TP
-               if(UseHiddenTakeProfit) SetTakeProfitHidden(OnJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,P,OrderNumber);
+               if(UseHiddenTakeProfit) SetTakeProfitHidden(VerboseJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,P,OrderNumber);
                
                // Set Volatility Trailing Stop Level           
-               if(UseVolTrailingStops) SetVolTrailingStop(OnJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,P,OrderNumber);
+               if(UseVolTrailingStops) SetVolTrailingStop(VerboseJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,P,OrderNumber);
                
                // Set Hidden Volatility Trailing Stop Level 
-               if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,P,OrderNumber);
+               if(UseHiddenVolTrailing) SetHiddenVolTrailing(VerboseJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,P,OrderNumber);
              
               }
    
             if(TradeAllowed && EntrySignal(CrossTriggered)==2)
               { // Open Short Positions based on PipFinite Sell signal
-               OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+               OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,VerboseJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
    
                // Set Stop Loss value for Hidden SL
-               if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,P,OrderNumber);
+               if(UseHiddenStopLoss) SetStopLossHidden(VerboseJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,P,OrderNumber);
    
                // Set Take Profit value for Hidden TP
-               if(UseHiddenTakeProfit) SetTakeProfitHidden(OnJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,P,OrderNumber);
+               if(UseHiddenTakeProfit) SetTakeProfitHidden(VerboseJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,P,OrderNumber);
                
                // Set Volatility Trailing Stop Level 
-               if(UseVolTrailingStops) SetVolTrailingStop(OnJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,P,OrderNumber);
+               if(UseVolTrailingStops) SetVolTrailingStop(VerboseJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,P,OrderNumber);
                 
                // Set Hidden Volatility Trailing Stop Level  
-               if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,P,OrderNumber);
+               if(UseHiddenVolTrailing) SetHiddenVolTrailing(VerboseJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,P,OrderNumber);
              
               }
            }
@@ -356,6 +407,12 @@ int start()
 /*
         Not Applicable (See Desiree for example of pending order rules).
    */
+
+//----------Display ZigZag Information-----------
+   if(VerboseJournaling)
+     {
+      DisplayZigZagInfo(); // Show current ZigZag support/resistance analysis
+     }
 
 //----
 
@@ -448,15 +505,54 @@ int ExitSignal(int CrossOccurred)
 // This function checks for exit signals
 
    int   ExitOutput=0;
+   string exitReason = "";
 
    if(CrossOccurred==1)
      {
       ExitOutput=1;
+      exitReason = "PipFinite Buy Signal (Exit Sell Positions)";
      }
 
    if(CrossOccurred==2)
      {
       ExitOutput=2;
+      exitReason = "PipFinite Sell Signal (Exit Buy Positions)";
+     }
+
+   // Check if current price is near support/resistance levels
+   bool nearSupportResistance = IsPriceNearSupportResistance(Bid, SupportResistanceThreshold);
+   
+   if(nearSupportResistance)
+     {
+      // If we have long positions and price is near resistance, signal exit
+      if(CountPosOrders(MagicNumber,OP_BUY) > 0)
+        {
+         double nearestResistance = GetNearestResistanceLevel(Bid);
+         if(nearestResistance > 0 && MathAbs(Bid - nearestResistance) <= SupportResistanceThreshold * Point * P)
+           {
+            ExitOutput = 2; // Exit long positions
+            exitReason = "Price Near Resistance Level at " + DoubleToString(nearestResistance, Digits) + " (Distance: " + DoubleToString(MathAbs(Bid - nearestResistance) / (Point * P), 1) + " pips)";
+            if(VerboseJournaling) Print("EA Journaling: Exit signal - BUY position near resistance at " + DoubleToString(nearestResistance, Digits));
+           }
+        }
+      
+      // If we have short positions and price is near support, signal exit
+      if(CountPosOrders(MagicNumber,OP_SELL) > 0)
+        {
+         double nearestSupport = GetNearestSupportLevel(Bid);
+         if(nearestSupport > 0 && MathAbs(Bid - nearestSupport) <= SupportResistanceThreshold * Point * P)
+           {
+            ExitOutput = 1; // Exit short positions
+            exitReason = "Price Near Support Level at " + DoubleToString(nearestSupport, Digits) + " (Distance: " + DoubleToString(MathAbs(Bid - nearestSupport) / (Point * P), 1) + " pips)";
+            if(VerboseJournaling) Print("EA Journaling: Exit signal - SELL position near support at " + DoubleToString(nearestSupport, Digits));
+           }
+        }
+     }
+
+   // Log the exit reason if VerboseJournaling is enabled and there's an exit signal
+   if(VerboseJournaling && ExitOutput != 0)
+     {
+      Print("EA Journaling: Exit Signal Generated - Reason: " + exitReason);
      }
 
    return(ExitOutput);
@@ -829,12 +925,28 @@ bool CloseOrderPosition(int TYPE,bool Journaling,int Magic,int Slip,int K,int Re
             bool Closing=false;
             double Price=0;
             color arrow_color=0;if(TYPE==OP_BUY)arrow_color=Blue;if(TYPE==OP_SELL)arrow_color=Green;
-            if(Journaling)Print("EA Journaling: Trying to close position "+(string)OrderTicket()+" ...");
+            
+            // Log detailed trade information before closing
+            if(Journaling) 
+              {
+               double profit = OrderProfit() + OrderSwap() + OrderCommission();
+               string tradeType = (TYPE==OP_BUY) ? "BUY" : "SELL";
+               Print("EA Journaling: Closing " + tradeType + " position - Ticket: " + string(OrderTicket()) + 
+                     ", Lots: " + DoubleToString(OrderLots(),2) + 
+                     ", Open Price: " + DoubleToString(OrderOpenPrice(), Digits) + 
+                     ", Current Price: " + DoubleToString((TYPE==OP_BUY) ? Bid : Ask, Digits) + 
+                     ", Profit: " + DoubleToString(profit, 2) + " " + AccountCurrency());
+               Print("EA Journaling: Trying to close position " + string(OrderTicket()) + " ...");
+              }
+              
             HandleTradingEnvironment(Journaling,RetryInterval);
             if(TYPE==OP_BUY)Price=Bid; if(TYPE==OP_SELL)Price=Ask;
             Closing=OrderClose(OrderTicket(),OrderLots(),Price,Slip*K,arrow_color);
             if(Journaling && !Closing)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
-            if(Journaling && Closing)Print("EA Journaling: Position successfully closed.");
+            if(Journaling && Closing)
+              {
+               Print("EA Journaling: Position " + string(OrderTicket()) + " successfully closed at " + DoubleToString(Price, Digits));
+              }
            }
         }
       else
@@ -1287,7 +1399,7 @@ void TriggerTakeProfitHidden(bool Journaling,int Retry_Interval,int Magic,int Sl
             if(Journaling && Closing)Print("EA Journaling: Position successfully closed.");
 
            }
-         if(OrderType()==OP_SELL && OrderOpenPrice() -(orderTP*K*Point)>=Ask) 
+         if(OrderType()==OP_SELL && OrderOpenPrice()-(orderTP*K*Point)>=Ask) 
            { // Checks TP condition for closing short orders 
 
             if(Journaling)Print("EA Journaling: Trying to close position "+(string)OrderTicket()+" ...");
@@ -2128,4 +2240,168 @@ string GetErrorDescription(int error)
   }
 //+------------------------------------------------------------------+
 //| End of ERROR DESCRIPTION                                         
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| GET ZIGZAG HIGH VALUE                                            
+//+------------------------------------------------------------------+
+double GetZigZagHigh(int shift)
+  {
+// Helper function to get ZigZag high value at specific shift
+   return(iCustom(NULL, 0, "ZigZag", ZigZag_Depth, ZigZag_Deviation, ZigZag_Backstep, 1, shift));
+  }
+//+------------------------------------------------------------------+
+//| End of GET ZIGZAG HIGH VALUE                                     
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| GET ZIGZAG LOW VALUE                                             
+//+------------------------------------------------------------------+
+double GetZigZagLow(int shift)
+  {
+// Helper function to get ZigZag low value at specific shift
+   return(iCustom(NULL, 0, "ZigZag", ZigZag_Depth, ZigZag_Deviation, ZigZag_Backstep, 2, shift));
+  }
+//+------------------------------------------------------------------+
+//| End of GET ZIGZAG LOW VALUE                                      
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| GET NEAREST SUPPORT LEVEL                                        
+//+------------------------------------------------------------------+
+double GetNearestSupportLevel(double currentPrice)
+  {
+// This function returns the nearest support level below the current price
+// Uses ZigZag indicator buffer 2 (lows) directly
+
+   double nearestSupport = 0;
+   double minDistance = 999999;
+   
+   // Look through recent ZigZag low points
+   for(int i = 1; i < 500; i++) // Check last 500 bars
+     {
+      double zigZagLow = GetZigZagLow(i);
+      
+      if(zigZagLow != EMPTY_VALUE && zigZagLow != 0 && zigZagLow < currentPrice)
+        {
+         double distance = currentPrice - zigZagLow;
+         if(distance < minDistance)
+           {
+            minDistance = distance;
+            nearestSupport = zigZagLow;
+           }
+        }
+     }
+   
+   return(nearestSupport);
+  }
+//+------------------------------------------------------------------+
+//| End of GET NEAREST SUPPORT LEVEL                                 
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| GET NEAREST RESISTANCE LEVEL                                     
+//+------------------------------------------------------------------+
+double GetNearestResistanceLevel(double currentPrice)
+  {
+// This function returns the nearest resistance level above the current price
+// Uses ZigZag indicator buffer 1 (highs) directly
+
+   double nearestResistance = 0;
+   double minDistance = 999999;
+   
+   // Look through recent ZigZag high points
+   for(int i = 1; i < 500; i++) // Check last 500 bars
+     {
+      double zigZagHigh = GetZigZagHigh(i);
+      
+      if(zigZagHigh != EMPTY_VALUE && zigZagHigh != 0 && zigZagHigh > currentPrice)
+        {
+         double distance = zigZagHigh - currentPrice;
+         if(distance < minDistance)
+           {
+            minDistance = distance;
+            nearestResistance = zigZagHigh;
+           }
+        }
+     }
+   
+   return(nearestResistance);
+  }
+//+------------------------------------------------------------------+
+//| End of GET NEAREST RESISTANCE LEVEL                              
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| IS PRICE NEAR SUPPORT RESISTANCE                                 
+//+------------------------------------------------------------------+
+bool IsPriceNearSupportResistance(double price, double threshold)
+  {
+// This function checks if the price is near any support or resistance level
+// Uses ZigZag indicator buffers directly
+
+   // Check recent ZigZag support levels (lows)
+   for(int i = 1; i < 100; i++) // Check last 100 bars
+     {
+      double zigZagLow = GetZigZagLow(i);
+      
+      if(zigZagLow != EMPTY_VALUE && zigZagLow != 0)
+        {
+         if(MathAbs(price - zigZagLow) <= threshold * Point * P)
+           {
+            return(true);
+           }
+        }
+     }
+   
+   // Check recent ZigZag resistance levels (highs)
+   for(int i = 1; i < 100; i++) // Check last 100 bars
+     {
+      double zigZagHigh = GetZigZagHigh(i);
+      
+      if(zigZagHigh != EMPTY_VALUE && zigZagHigh != 0)
+        {
+         if(MathAbs(price - zigZagHigh) <= threshold * Point * P)
+           {
+            return(true);
+           }
+        }
+     }
+   
+   return(false);
+  }
+//+------------------------------------------------------------------+
+//| End of IS PRICE NEAR SUPPORT RESISTANCE                          
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| DISPLAY ZIGZAG SUPPORT RESISTANCE INFO                          
+//+------------------------------------------------------------------+
+void DisplayZigZagInfo()
+  {
+// This function displays current ZigZag support and resistance levels information
+
+   string info = "\n=== ZigZag Support/Resistance Analysis ===\n";
+   
+   // Show current ZigZag values
+   info += "Current ZigZag High: " + (ZigZagHighs != EMPTY_VALUE && ZigZagHighs != 0 ? DoubleToString(ZigZagHighs, Digits) : "None") + "\n";
+   info += "Current ZigZag Low: " + (ZigZagLows != EMPTY_VALUE && ZigZagLows != 0 ? DoubleToString(ZigZagLows, Digits) : "None") + "\n";
+   
+   // Show nearest levels to current price
+   double nearestSupport = GetNearestSupportLevel(Bid);
+   double nearestResistance = GetNearestResistanceLevel(Bid);
+   
+   if(nearestSupport > 0)
+      info += "Nearest Support: " + DoubleToString(nearestSupport, Digits) + " (Distance: " + DoubleToString((Bid - nearestSupport) / Point / P, 1) + " pips)\n";
+   else
+      info += "Nearest Support: None found\n";
+      
+   if(nearestResistance > 0)
+      info += "Nearest Resistance: " + DoubleToString(nearestResistance, Digits) + " (Distance: " + DoubleToString((nearestResistance - Bid) / Point / P, 1) + " pips)\n";
+   else
+      info += "Nearest Resistance: None found\n";
+   
+   // Check if near S/R levels
+   bool nearSR = IsPriceNearSupportResistance(Bid, SupportResistanceThreshold);
+   info += "Near S/R Level: " + (nearSR ? "YES" : "NO") + "\n";
+   info += "S/R Threshold: " + DoubleToString(SupportResistanceThreshold, 1) + " pips\n";
+   
+   Comment(info);
+  }
+//+------------------------------------------------------------------+
+//| End of DISPLAY ZIGZAG SUPPORT RESISTANCE INFO                   
 //+------------------------------------------------------------------+
