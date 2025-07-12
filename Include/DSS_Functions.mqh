@@ -1,370 +1,12 @@
-//+------------------------------------------------------------------+
-//|                                          Falcon EA Template v2.0
-//|                                        Copyright 2015,Lucas Liew 
-//|                                  lucas@blackalgotechnologies.com 
-//+------------------------------------------------------------------+
-#include "Include/01_GetHistoryOrder.mqh"
-#include "Include/02_OrderProfitToCSV.mqh"
-#include "Include/03_ReadCommandFromCSV.mqh"
-#include "Include/08_TerminalNumber.mqh"
-
-#property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
-#property copyright "Copyright 2018, Vladimir Zhbanko"
-#property link      "lucas@blackalgotechnologies.com"
+//+-------------------------------------------------------------------+
+//|                                                 DSS_Functions.mqh |
+//|                                  Copyright 2021, Vladimir Zhbanko |
+//+-------------------------------------------------------------------+
+#property copyright "Copyright 2021, Vladimir Zhbanko"
 #property link      "https://vladdsm.github.io/myblog_attempt/"
-#property version   "1.001"  
 #property strict
-/* 
 
-Falcon B: 
-- Adding specific functions to manage Decision Support System
-
-*/
-
-//+------------------------------------------------------------------+
-//| Setup                                               
-//+------------------------------------------------------------------+
-extern string  Header1="----------EA General Settings-----------";
-extern int     MagicNumber                      = 8118201;
-extern int     TerminalType                     = 1;         //0 mean slave, 1 mean master
-extern bool    R_Management                     = true;      //R_Management true will enable Decision Support Centre (using R)
-extern int     Slippage                         = 3; // In Pips
-extern bool    IsECNbroker                      = false; // Is your broker an ECN
-extern bool    OnJournaling                     = true; // Add EA updates in the Journal Tab
-
-extern string  Header2="----------Trading Rules Variables-----------";
-extern int     PipFinite_Period                 = 3;       // PipFinite Trend PRO Period
-extern double  PipFinite_TargetFactor           = 2.0;     // PipFinite Trend PRO Target Factor
-extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PRO Maximum History Bars
-extern int     PipFinite_UptrendBuffer          = 10;       // PipFinite Uptrend Buffer Number
-extern int     PipFinite_DowntrendBuffer        = 11;       // PipFinite Downtrend Buffer Number
-
-extern string  Header3="----------Position Sizing Settings-----------";
-extern string  Lot_explanation                  = "If IsSizingOn = true, Lots variable will be ignored";
-extern double  Lots                             = 0.01;
-extern bool    IsSizingOn                       = False;
-extern double  Risk                             = 1; // Risk per trade (in percentage)
-extern int     MaxPositionsAllowed              = 1;
-
-extern string  Header4="----------TP & SL Settings-----------";
-extern bool    UseFixedStopLoss                 = True; // If this is false and IsSizingOn = True, sizing algo will not be able to calculate correct lot size. 
-extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
-extern bool    IsVolatilityStopOn               = True;
-extern double  VolBasedSLMultiplier             = 3; // Stop Loss Amount in units of Volatility
-
-extern bool    UseFixedTakeProfit               = True;
-extern double  FixedTakeProfit                  = 0; // Hard Take Profit in Pips. Will be overridden if vol-based TP is true 
-extern bool    IsVolatilityTakeProfitOn         = True;
-extern double  VolBasedTPMultiplier             = 6; // Take Profit Amount in units of Volatility
-
-extern string  Header5="----------Hidden TP & SL Settings-----------";
-extern bool    UseHiddenStopLoss                = False;
-extern double  FixedStopLoss_Hidden             = 0; // In Pips. Will be overridden if hidden vol-based SL is true 
-extern bool    IsVolatilityStopLossOn_Hidden    = False;
-extern double  VolBasedSLMultiplier_Hidden      = 0; // Stop Loss Amount in units of Volatility
-
-extern bool    UseHiddenTakeProfit              = False;
-extern double  FixedTakeProfit_Hidden           = 0; // In Pips. Will be overridden if hidden vol-based TP is true 
-extern bool    IsVolatilityTakeProfitOn_Hidden  = False;
-extern double  VolBasedTPMultiplier_Hidden      = 0; // Take Profit Amount in units of Volatility
-
-extern string  Header6="----------Breakeven Stops Settings-----------";
-extern bool    UseBreakevenStops                = False;
-extern double  BreakevenBuffer                  = 0; // In pips
-
-extern string  Header7="----------Hidden Breakeven Stops Settings-----------";
-extern bool    UseHiddenBreakevenStops          = False;
-extern double  BreakevenBuffer_Hidden           = 0; // In pips
-
-extern string  Header8="----------Trailing Stops Settings-----------";
-extern bool    UseTrailingStops                 = False;
-extern double  TrailingStopDistance             = 0; // In pips
-extern double  TrailingStopBuffer               = 0; // In pips
-
-extern string  Header9="----------Hidden Trailing Stops Settings-----------";
-extern bool    UseHiddenTrailingStops           = False;
-extern double  TrailingStopDistance_Hidden      = 0; // In pips
-extern double  TrailingStopBuffer_Hidden        = 0; // In pips
-
-extern string  Header10="----------Volatility Trailing Stops Settings-----------";
-extern bool    UseVolTrailingStops              = False;
-extern double  VolTrailingDistMultiplier        = 0; // In units of ATR
-extern double  VolTrailingBuffMultiplier        = 0; // In units of ATR
-
-extern string  Header11="----------Hidden Volatility Trailing Stops Settings-----------";
-extern bool    UseHiddenVolTrailing             = False;
-extern double  VolTrailingDistMultiplier_Hidden = 0; // In units of ATR
-extern double  VolTrailingBuffMultiplier_Hidden = 0; // In units of ATR
-
-extern string  Header12="----------Volatility Measurement Settings-----------";
-extern int     atr_period                       = 14;
-
-extern string  Header13="----------Set Max Loss Limit-----------";
-extern bool    IsLossLimitActivated             = False;
-extern double  LossLimitPercent                 = 50;
-
-extern string  Header14="----------Set Max Volatility Limit-----------";
-extern bool    IsVolLimitActivated              = False;
-extern double  VolatilityMultiplier             = 3; // In units of ATR
-extern int     ATRTimeframe                     = 60; // In minutes
-extern int     ATRPeriod                        = 14;
-
-
-string  InternalHeader1="----------Errors Handling Settings-----------";
-int     RetryInterval                           = 100; // Pause Time before next retry (in milliseconds)
-int     MaxRetriesPerTick                       = 10;
-
-string  InternalHeader2="----------Service Variables-----------";
-
-double Stop,Take;
-double StopHidden,TakeHidden;
-int YenPairAdjustFactor;
-int    P;
-double myATR;
-double Price1;
-
-// TDL 3: Declaring Variables (and the extern variables above)
-
-double PipFiniteUptrendSignal1, PipFiniteDowntrendSignal1;
-int CrossTriggered;
-
-int OrderNumber;
-double HiddenSLList[][2]; // First dimension is for position ticket numbers, second is for the SL Levels
-double HiddenTPList[][2]; // First dimension is for position ticket numbers, second is for the TP Levels
-double HiddenBEList[]; // First dimension is for position ticket numbers
-double HiddenTrailingList[][2]; // First dimension is for position ticket numbers, second is for the hidden trailing stop levels
-double VolTrailingList[][2]; // First dimension is for position ticket numbers, second is for recording of volatility amount (one unit of ATR) at the time of trade
-double HiddenVolTrailingList[][3]; // First dimension is for position ticket numbers, second is for the hidden trailing stop levels, third is for recording of volatility amount (one unit of ATR) at the time of trade
-
-string  InternalHeader3="----------Decision Support Variables-----------";
-bool     TradeAllowed = true; 
-datetime ReferenceTime;       //used for order history
-
-//+------------------------------------------------------------------+
-//| End of Setup                                          
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Expert Initialization                                    
-//+------------------------------------------------------------------+
-int init()
-  {
-   
-//------------- Decision Support Centre
-// Write file to the sandbox if it's does not exist
-//    
-   ReferenceTime = TimeCurrent(); // record time for order history function
-   
-   //write file system control to enable initial trading
-   TradeAllowed = ReadCommandFromCSV(MagicNumber);
-      if(TradeAllowed == false)
-     {
-      Comment("Trade is not allowed");
-     }
-   else if(TradeAllowed == true)   // or file does not exist, create a new file
-            {
-               string fileName = "SystemControl"+string(MagicNumber)+".csv";//create the name of the file same for all symbols...
-               // open file handle
-               int handle = FileOpen(fileName,FILE_CSV|FILE_READ|FILE_WRITE); FileSeek(handle,0,SEEK_END);
-               string data = string(MagicNumber)+","+string(TerminalType);
-               FileWrite(handle,data);  FileClose(handle);
-               //end of writing to file
-               Comment("Trade is allowed");
-            }
-            
-//---------             
-   
-   P=GetP(); // To account for 5 digit brokers. Used to convert pips to decimal place
-   YenPairAdjustFactor=GetYenAdjustFactor(); // Adjust for YenPair
-
-//----------(Hidden) TP, SL and Breakeven Stops Variables-----------  
-
-// If EA disconnects abruptly and there are open positions from this EA, records form these arrays will be gone.
-   if(UseHiddenStopLoss) ArrayResize(HiddenSLList,MaxPositionsAllowed,0);
-   if(UseHiddenTakeProfit) ArrayResize(HiddenTPList,MaxPositionsAllowed,0);
-   if(UseHiddenBreakevenStops) ArrayResize(HiddenBEList,MaxPositionsAllowed,0);
-   if(UseHiddenTrailingStops) ArrayResize(HiddenTrailingList,MaxPositionsAllowed,0);
-   if(UseVolTrailingStops) ArrayResize(VolTrailingList,MaxPositionsAllowed,0);
-   if(UseHiddenVolTrailing) ArrayResize(HiddenVolTrailingList,MaxPositionsAllowed,0);
-
-   start();
-   return(0);
-  }
-//+------------------------------------------------------------------+
-//| End of Expert Initialization                            
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Expert Deinitialization                                  
-//+------------------------------------------------------------------+
-int deinit()
-  {
-   return(0);
-  }
-//+------------------------------------------------------------------+
-//| End of Expert Deinitialization                          
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Expert start                                             
-//+------------------------------------------------------------------+
-int start()
-  {
-  
-//----------Order management through R - to avoid slow down the system only enable with external parameters
-   if(R_Management)
-     {
-         //code that only executed once a bar
-      //   Direction = -1; //set direction to -1 by default in order to achieve cross!
-         OrderProfitToCSV(T_Num());                        //write previous orders profit results for auto analysis in R
-         TradeAllowed = ReadCommandFromCSV(MagicNumber);              //read command from R to make sure trading is allowed
-      //   Direction = ReadAutoPrediction(MagicNumber, -1);             //get prediction from R for trade direction         
-        
-       
-     }
-//----------Variables to be Refreshed-----------
-
-   OrderNumber=0; // OrderNumber used in Entry Rules
-
-//----------Entry & Exit Variables-----------
-
-   // TDL 1: Assigning Values to Variables
-   
-   // Calculate entry/exit signals only at the beginning of a new bar
-   static datetime lastSignalBarTime = 0;
-   datetime currentBarTime = Time[1]; // Use previous completed bar
-   
-   // Only calculate signals once per new bar
-   if(currentBarTime != lastSignalBarTime)
-   {
-      // Get PipFinite indicator values with proper parameters
-      PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
-      PipFiniteDowntrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_DowntrendBuffer, 1); // Buffer for Downtrend, Shift 1
-      
-      // Calculate entry signals using Close[2] and Close[1] for crossing logic
-      // Use main trend line - choose uptrend or downtrend based on which has valid data
-      double pipFiniteLine = EMPTY_VALUE;
-      if (PipFiniteUptrendSignal1 != EMPTY_VALUE)
-         pipFiniteLine = PipFiniteUptrendSignal1;
-      else if (PipFiniteDowntrendSignal1 != EMPTY_VALUE)
-         pipFiniteLine = PipFiniteDowntrendSignal1;
-      
-      if (pipFiniteLine == EMPTY_VALUE)
-         CrossTriggered = 0; // Reset CrossTriggered if no signal is available
-      else
-         CrossTriggered = Crossed(Close[2], Close[1], pipFiniteLine); // Returns 0=no cross, 1=buy signal, 2=sell signal
-      
-      lastSignalBarTime = currentBarTime; // Update last signal calculation time
-   }
-
-//----------TP, SL, Breakeven and Trailing Stops Variables-----------
-
-   myATR=iATR(NULL,Period(),atr_period,1);
-
-   if(UseFixedStopLoss==False) 
-     {
-      Stop=0;
-        }  else {
-      Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,P);
-     }
-
-   if(UseFixedTakeProfit==False) 
-     {
-      Take=0;
-        }  else {
-      Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,P);
-     }
-
-   if(UseBreakevenStops) BreakevenStopAll(OnJournaling,RetryInterval,BreakevenBuffer,MagicNumber,P);
-   if(UseTrailingStops) TrailingStopAll(OnJournaling,TrailingStopDistance,TrailingStopBuffer,RetryInterval,MagicNumber,P);
-   if(UseVolTrailingStops) {
-      UpdateVolTrailingList(OnJournaling,RetryInterval,MagicNumber);
-      ReviewVolTrailingStop(OnJournaling,VolTrailingDistMultiplier,VolTrailingBuffMultiplier,RetryInterval,MagicNumber,P);
-   }
-//----------(Hidden) TP, SL, Breakeven and Trailing Stops Variables-----------  
-
-   if(UseHiddenStopLoss) TriggerStopLossHidden(OnJournaling,RetryInterval,MagicNumber,Slippage,P);
-   if(UseHiddenTakeProfit) TriggerTakeProfitHidden(OnJournaling,RetryInterval,MagicNumber,Slippage,P);
-   if(UseHiddenBreakevenStops) { 
-      UpdateHiddenBEList(OnJournaling,RetryInterval,MagicNumber);
-      SetAndTriggerBEHidden(OnJournaling,BreakevenBuffer,MagicNumber,Slippage,P,RetryInterval);
-   }
-   if(UseHiddenTrailingStops) {
-      UpdateHiddenTrailingList(OnJournaling,RetryInterval,MagicNumber);
-      SetAndTriggerHiddenTrailing(OnJournaling,TrailingStopDistance_Hidden,TrailingStopBuffer_Hidden,Slippage,RetryInterval,MagicNumber,P);
-   }
-   if(UseHiddenVolTrailing) {
-      UpdateHiddenVolTrailingList(OnJournaling,RetryInterval,MagicNumber);
-      TriggerAndReviewHiddenVolTrailing(OnJournaling,VolTrailingDistMultiplier_Hidden,VolTrailingBuffMultiplier_Hidden,Slippage,RetryInterval,MagicNumber,P);
-   }
-
-//----------Exit Rules (All Opened Positions)-----------
-
-   // TDL 2: Setting up Exit rules. Modify the ExitSignal() function to suit your needs.
-
-   if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(CrossTriggered)==2)
-     { // Close Long Positions
-      CloseOrderPosition(OP_BUY, OnJournaling, MagicNumber, Slippage, P, RetryInterval); 
-
-     }
-   if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ExitSignal(CrossTriggered)==1)
-     { // Close Short Positions
-      CloseOrderPosition(OP_SELL, OnJournaling, MagicNumber, Slippage, P, RetryInterval);
-     }
-
-//----------Entry Rules (Market and Pending) -----------
-
-   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(CrossTriggered))==False) 
-      if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
-         if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==False)
-           {
-            if(TradeAllowed && EntrySignal(CrossTriggered)==1)
-              { // Open Long Positions based on PipFinite Buy signal
-               OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
-   
-               // Set Stop Loss value for Hidden SL
-               if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,P,OrderNumber);
-   
-               // Set Take Profit value for Hidden TP
-               if(UseHiddenTakeProfit) SetTakeProfitHidden(OnJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,P,OrderNumber);
-               
-               // Set Volatility Trailing Stop Level           
-               if(UseVolTrailingStops) SetVolTrailingStop(OnJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,P,OrderNumber);
-               
-               // Set Hidden Volatility Trailing Stop Level 
-               if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,P,OrderNumber);
-             
-              }
-   
-            if(TradeAllowed && EntrySignal(CrossTriggered)==2)
-              { // Open Short Positions based on PipFinite Sell signal
-               OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
-   
-               // Set Stop Loss value for Hidden SL
-               if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,P,OrderNumber);
-   
-               // Set Take Profit value for Hidden TP
-               if(UseHiddenTakeProfit) SetTakeProfitHidden(OnJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,P,OrderNumber);
-               
-               // Set Volatility Trailing Stop Level 
-               if(UseVolTrailingStops) SetVolTrailingStop(OnJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,P,OrderNumber);
-                
-               // Set Hidden Volatility Trailing Stop Level  
-               if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,P,OrderNumber);
-             
-              }
-           }
-
-//----------Pending Order Management-----------
-/*
-        Not Applicable (See Desiree for example of pending order rules).
-   */
-
-//----
-
-   return(0);
-  }
-//+------------------------------------------------------------------+
-//| End of expert start function                                     |
-//+------------------------------------------------------------------+
-
+// Functions library to DSS_Bot, DSS_Rule, DSS_Hybrid robots
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //|                     FUNCTIONS LIBRARY                                   
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -373,7 +15,10 @@ int start()
 
 Content:
 1) EntrySignal
-2) ExitSignal
+2.1) ExitSignal
+2.2) ExitSignalOnTimerMagic
+2.3) ExitSignalOnTimerTicket
+2.4) ExitSignalOnAI
 3) GetLot
 4) CheckLot
 5) CountPosOrders
@@ -406,9 +51,10 @@ Content:
 32) TriggerAndReviewHiddenVolTrailing
 33) HandleTradingEnvironment
 34) GetErrorDescription
+35) GetTradeFlagCondition
+36) GetTradePrediction
 
 */
-
 
 //+------------------------------------------------------------------+
 //| ENTRY SIGNAL                                                     |
@@ -463,6 +109,240 @@ int ExitSignal(int CrossOccurred)
   }
 //+------------------------------------------------------------------+
 //| End of Exit SIGNAL                                               
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Exit SIGNAL ON TIMER MAGIC                                            |
+//+------------------------------------------------------------------+
+int ExitSignalOnTimerMagic(int CrossOccurred, int Magic, int MaxOrderCloseTimer)
+  {
+// Type: Customisable 
+// Modify this function to suit your trading robot
+
+// This function checks for exit signals using a magic number. Note that function will close multiple orders
+
+   int   ExitOutput=0;
+   int   CurrOrderHoldTime;
+   double CurrOrderProfit;  
+   
+   if(CrossOccurred==1)
+     {
+      //checking the orders time before closing them
+       for(int i=OrdersTotal()-1; i>=0; i--) 
+        {
+         CurrOrderHoldTime = 0;
+         if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true &&
+                         OrderSymbol()==Symbol() &&
+                         OrderMagicNumber()==Magic && 
+                         OrderType()==OP_SELL) 
+                         //Calculating order current time in minutes, used for closing orders
+                         CurrOrderHoldTime = int((TimeCurrent() - OrderOpenTime())/60);
+                         CurrOrderProfit = NormalizeDouble(OrderProfit() + OrderSwap() + OrderCommission(),2);
+         //if(CurrOrderHoldTime >= MaxOrderCloseTimer && CurrOrderProfit > 0)  ExitOutput=1;
+         if(CurrOrderHoldTime >= MaxOrderCloseTimer)  ExitOutput=1;
+        }
+     
+     }
+
+   if(CrossOccurred==2)
+     {
+      //checking the orders time before closing them
+       for(int i=OrdersTotal()-1; i>=0; i--) 
+        {
+         CurrOrderHoldTime = 0;
+         if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true &&
+                         OrderSymbol()==Symbol() &&
+                         OrderMagicNumber()==Magic && 
+                         OrderType() == OP_BUY) 
+                         //Calculating order current time in minutes, used for closing orders
+                         CurrOrderHoldTime = int((TimeCurrent() - OrderOpenTime())/60);
+                         CurrOrderProfit = NormalizeDouble(OrderProfit() + OrderSwap() + OrderCommission(),2);
+         if(CurrOrderHoldTime >= MaxOrderCloseTimer && CurrOrderProfit > 0 )  ExitOutput=2;
+         if(CurrOrderHoldTime >= MaxOrderCloseTimer)  ExitOutput=2;
+        }
+     
+     }
+
+   return(ExitOutput);
+  }
+//+------------------------------------------------------------------+
+//| End of Exit SIGNAL ON TIMER                           
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Exit SIGNAL ON AI                                                |
+//+------------------------------------------------------------------+
+int ExitSignalOnAI(int CrossOccurred, int Magic, double CurrPrediction)
+  {
+// Type: Customisable 
+// Modify this function to suit your trading robot
+// CrossOccurred - identifies type of position 2 buy; 1 sell
+// CurrPrediction - current prediction from AI
+
+// This function checks for exit signals
+
+   int    ExitOutput=0;
+   double CurrOrderProfit; 
+   
+   if(CrossOccurred==1) //condition for sell orders
+     {
+      //checking the orders time before closing them
+       for(int i=OrdersTotal()-1; i>=0; i--) 
+        {
+         CurrOrderProfit = 0;
+         if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true &&
+                         OrderSymbol()==Symbol() &&
+                         OrderMagicNumber()==Magic && 
+                         OrderType()==OP_SELL) 
+                         //Calculating order current profit
+                         CurrOrderProfit = NormalizeDouble(OrderProfit() + OrderSwap() + OrderCommission(),2);
+         if(CurrOrderProfit > 0 && CurrPrediction > 0)  ExitOutput=1;
+        }
+     
+     }
+
+   if(CrossOccurred==2) //condition for buy orders
+     {
+      //checking the orders time before closing them
+       for(int i=OrdersTotal()-1; i>=0; i--) 
+        {
+         CurrOrderProfit = 0;
+         if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true &&
+                         OrderSymbol()==Symbol() &&
+                         OrderMagicNumber()==Magic && 
+                         OrderType() == OP_BUY) 
+                         //Calculating order current profit
+                         CurrOrderProfit = NormalizeDouble(OrderProfit() + OrderSwap() + OrderCommission(),2);
+         if(CurrOrderProfit > 0 && CurrPrediction < 0)  ExitOutput=2;
+        }
+     
+     }
+
+   return(ExitOutput);
+  }
+//+------------------------------------------------------------------+
+//| End of Exit SIGNAL ON AI                           
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Exit SIGNAL ON TIMER TICKET                                            |
+//+------------------------------------------------------------------+
+int ExitSignalOnTimerTicket(int CrossOccurred, int Magic, int & infoArray [][])
+  {
+// Type: Customisable 
+// Modify this function to suit your trading robot
+
+// This function checks for exit signals for each open order separately using the ticket
+// If this will output 2 then one or more BUY orders shall be closed
+//                     1 then one or more SELL orders shall be closed
+
+   int   ExitOutput=0;
+   int   CurrOrderHoldTime;
+   double CurrOrderProfit;  
+   
+      
+   if(CrossOccurred==1) //checking sell orders only
+     {
+         //check the order time using ticket from array
+         CurrOrderHoldTime = 0;
+         for(int j=0;j<ArrayRange(infoArray,0);j++)
+           {
+           Print("Info Array Ticket Number: " + (string)infoArray[j][0]);
+            if(OrderSelect(infoArray[j][0],SELECT_BY_TICKET,MODE_TRADES)==true &&
+                         OrderSymbol()==Symbol() &&
+                         OrderMagicNumber()==Magic && 
+                         OrderType()==OP_SELL) 
+                         //Calculating order current time in minutes, used for closing orders
+                         CurrOrderHoldTime = int((TimeCurrent() - OrderOpenTime())/60);
+                         CurrOrderProfit = NormalizeDouble(OrderProfit() + OrderSwap() + OrderCommission(),2);
+            //if(CurrOrderHoldTime >= infoArray[j][1] && CurrOrderProfit > 0)  ExitOutput=1;
+            if(CurrOrderHoldTime >= infoArray[j][1]) { ExitOutput=1; break;}
+            
+           }
+
+        
+     
+     }
+
+   if(CrossOccurred==2) //checking buy orders only
+     {
+         //checking the orders time using ticket from array
+         CurrOrderHoldTime = 0;
+         for(int j=0;j<ArrayRange(infoArray,0);j++)
+           {
+            if(OrderSelect(infoArray[j][0],SELECT_BY_TICKET,MODE_TRADES)==true &&
+                         OrderSymbol()==Symbol() &&
+                         OrderMagicNumber()==Magic && 
+                         OrderType()==OP_BUY) 
+                         //Calculating order current time in minutes, used for closing orders
+                         CurrOrderHoldTime = int((TimeCurrent() - OrderOpenTime())/60);
+                         CurrOrderProfit = NormalizeDouble(OrderProfit() + OrderSwap() + OrderCommission(),2);
+            //if(CurrOrderHoldTime >= infoArray[j][1] && CurrOrderProfit > 0)  ExitOutput=2;
+            if(CurrOrderHoldTime >= infoArray[j][1]) { ExitOutput=2; break;}
+           }
+     
+     }
+
+   return(ExitOutput);
+  }
+//+------------------------------------------------------------------+
+//| End of Exit SIGNAL ON TIMER TICKET                          
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Exit SIGNAL ON TIMER TICKET                                            |
+//+------------------------------------------------------------------+
+int ExitSignalOnTimerTicketBars(int CrossOccurred, int Magic, int BarTimeframeMin, int & infoArray [][])
+  {
+// Type: Customisable 
+// Modify this function to suit your trading robot
+
+// This function checks for exit signals for each open order separately using the ticket
+// If this will output 2 then one or more BUY orders shall be closed
+//                     1 then one or more SELL orders shall be closed
+// This function will calculate order open time in BARS!
+
+   int   ExitOutput=0;
+   int RequiredOrderTimeBars;
+   int CurrOrderHoldTimeBars = 0;
+      
+   if(CrossOccurred==1) //checking sell orders only
+     {
+         //check the order time using ticket from array
+         for(int j=0;j<ArrayRange(infoArray,0);j++)
+           {
+           //Print("Info Array Ticket Number: " + (string)infoArray[j][0]);
+            if(OrderSelect(infoArray[j][0],SELECT_BY_TICKET,MODE_TRADES)==true &&
+                         OrderSymbol()==Symbol() &&
+                         OrderMagicNumber()==Magic && 
+                         OrderType()==OP_SELL) 
+                         //Calculating order open time shift in bars to avoid closing order after the weekend
+                         CurrOrderHoldTimeBars = iBarShift(Symbol(), BarTimeframeMin,OrderOpenTime(),true);
+                         RequiredOrderTimeBars = infoArray[j][1]/BarTimeframeMin;
+            if(CurrOrderHoldTimeBars >= RequiredOrderTimeBars) { ExitOutput=1; break;}
+           }
+
+        
+     
+     }
+
+   if(CrossOccurred==2) //checking buy orders only
+     {
+         //checking the orders time using ticket from array
+         for(int j=0;j<ArrayRange(infoArray,0);j++)
+           {
+            if(OrderSelect(infoArray[j][0],SELECT_BY_TICKET,MODE_TRADES)==true &&
+                         OrderSymbol()==Symbol() &&
+                         OrderMagicNumber()==Magic && 
+                         OrderType()==OP_BUY) 
+                         //Calculating order open time shift in bars to avoid closing order after the weekend
+                         CurrOrderHoldTimeBars = iBarShift(Symbol(), BarTimeframeMin,OrderOpenTime(),true);
+                         RequiredOrderTimeBars = infoArray[j][1]/BarTimeframeMin;
+            if(CurrOrderHoldTimeBars >= RequiredOrderTimeBars) { ExitOutput=2; break;}
+           }
+     
+     }
+
+   return(ExitOutput);
+  }
+//+------------------------------------------------------------------+
+//| End of Exit SIGNAL ON TIMER TICKET                          
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
 //| Position Sizing Algo               
@@ -526,7 +406,7 @@ int CountPosOrders(int Magic,int TYPE)
 // This function counts number of positions/orders of OrderType TYPE
 
    int Orders=0;
-   for(int i=0; i<OrdersTotal(); i++)
+    for(int i=OrdersTotal()-1; i>=0; i--) 
      {
       if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic && OrderType()==TYPE)
          Orders++;
@@ -547,7 +427,7 @@ bool IsMaxPositionsReached(int MaxPositions,int Magic,bool Journaling)
 
 // This function checks the number of positions we are holding against the maximum allowed 
 
-   int result=False;
+   bool result=False;
    if(CountPosOrders(Magic,OP_BUY)+CountPosOrders(Magic,OP_SELL)>MaxPositions) 
      {
       result=True;
@@ -830,7 +710,7 @@ bool CloseOrderPosition(int TYPE,bool Journaling,int Magic,int Slip,int K,int Re
             double Price=0;
             color arrow_color=0;if(TYPE==OP_BUY)arrow_color=Blue;if(TYPE==OP_SELL)arrow_color=Green;
             if(Journaling)Print("EA Journaling: Trying to close position "+(string)OrderTicket()+" ...");
-            HandleTradingEnvironment(Journaling,RetryInterval);
+            HandleTradingEnvironment(Journaling,Retry_Interval);
             if(TYPE==OP_BUY)Price=Bid; if(TYPE==OP_SELL)Price=Ask;
             Closing=OrderClose(OrderTicket(),OrderLots(),Price,Slip*K,arrow_color);
             if(Journaling && !Closing)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
@@ -843,7 +723,7 @@ bool CloseOrderPosition(int TYPE,bool Journaling,int Magic,int Slip,int K,int Re
          if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic && OrderType()==TYPE)
            {
             if(Journaling)Print("EA Journaling: Trying to delete order "+(string)OrderTicket()+" ...");
-            HandleTradingEnvironment(Journaling,RetryInterval);
+            HandleTradingEnvironment(Journaling,Retry_Interval);
             Delete=OrderDelete(OrderTicket(),CLR_NONE);
             if(Journaling && !Delete)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
             if(Journaling && Delete)Print("EA Journaling: Order successfully deleted.");
@@ -851,6 +731,93 @@ bool CloseOrderPosition(int TYPE,bool Journaling,int Magic,int Slip,int K,int Re
         }
      }
    if(CountPosOrders(Magic, TYPE)==0)return(true); else return(false);
+  }
+//+------------------------------------------------------------------+
+//| End of CLOSE/DELETE ORDERS AND POSITIONS 
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| CLOSE/DELETE ORDERS AND POSITIONS
+//+------------------------------------------------------------------+
+void CloseOrderPositionTimer(int TYPE,bool Journaling,int Magic, int & infoArray [][], int Slip,int K,int Retry_Interval)
+  {
+// Type: Fixed Template 
+// Do not edit unless you know what you're doing
+
+// This function closes all 'expired' positions of type TYPE 
+
+
+     for(int i=0;i<ArrayRange(infoArray,0);i++)
+       {
+         
+         
+         // We check only tickets that have a ticket!
+         if((TYPE==OP_BUY || TYPE==OP_SELL) && infoArray[i][0] != 0)
+           {
+            if(OrderSelect(infoArray[i][0],SELECT_BY_TICKET,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic && OrderType()==TYPE)
+              {
+               //bringing more info from this order to decide if this should be closed
+               int CurrOrderHoldTime = int((TimeCurrent() - OrderOpenTime())/60);
+                     if(CurrOrderHoldTime >= infoArray[i][1])
+                     {
+                        bool Closing=false;
+                        double Price=0;
+                        color arrow_color=0;if(TYPE==OP_BUY)arrow_color=Blue;if(TYPE==OP_SELL)arrow_color=Green;
+                        if(Journaling)Print("EA Journaling: Trying to close position "+(string)OrderTicket()+" ...");
+                        HandleTradingEnvironment(Journaling,Retry_Interval);
+                        if(TYPE==OP_BUY)Price=Bid; if(TYPE==OP_SELL)Price=Ask;
+                        Closing=OrderClose(OrderTicket(),OrderLots(),Price,Slip*K,arrow_color);
+                        if(Journaling && !Closing)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
+                        if(Journaling && Closing)Print("EA Journaling: Position successfully closed.");
+                     }
+              }
+           }
+
+     }
+
+  }
+//+------------------------------------------------------------------+
+//| End of CLOSE/DELETE ORDERS AND POSITIONS 
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| CLOSE/DELETE ORDERS AND POSITIONS
+//+------------------------------------------------------------------+
+void CloseOrderPositionTimerBars(int TYPE,bool Journaling,int Magic, int BarTimeframeMin, int & infoArray [][], int Slip,int K,int Retry_Interval)
+  {
+// Type: Fixed Template 
+// Do not edit unless you know what you're doing
+
+// This function closes all 'expired' positions of type TYPE 
+   int RequiredOrderTimeBars;
+   int CurrOrderHoldTimeBars = 0;
+
+     for(int i=0;i<ArrayRange(infoArray,0);i++)
+       {
+         RequiredOrderTimeBars = infoArray[i][1]/BarTimeframeMin;
+         
+         // We check only tickets that have a ticket!
+         if((TYPE==OP_BUY || TYPE==OP_SELL) && infoArray[i][0] != 0)
+           {
+            if(OrderSelect(infoArray[i][0],SELECT_BY_TICKET,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic && OrderType()==TYPE)
+              {
+               //bringing more info from this order to decide if this should be closed
+               CurrOrderHoldTimeBars = iBarShift(Symbol(), BarTimeframeMin,OrderOpenTime(),true);
+                     if(CurrOrderHoldTimeBars >= RequiredOrderTimeBars)
+                     {
+                        bool Closing=false;
+                        double Price=0;
+                        color arrow_color=0;if(TYPE==OP_BUY)arrow_color=Blue;if(TYPE==OP_SELL)arrow_color=Green;
+                        if(Journaling)Print("EA Journaling: Trying to close position "+(string)OrderTicket()+" ...");
+                        HandleTradingEnvironment(Journaling,Retry_Interval);
+                        if(TYPE==OP_BUY)Price=Bid; if(TYPE==OP_SELL)Price=Ask;
+                        Closing=OrderClose(OrderTicket(),OrderLots(),Price,Slip*K,arrow_color);
+                        if(Journaling && !Closing)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
+                        if(Journaling && Closing)Print("EA Journaling: Position successfully closed.");
+                     }
+              }
+           }
+
+     }
+
   }
 //+------------------------------------------------------------------+
 //| End of CLOSE/DELETE ORDERS AND POSITIONS 
@@ -943,7 +910,7 @@ double VolBasedTakeProfit(bool isVolatilitySwitchOn,double fixedTP,double VolATR
 //| End of Volatility-Based Take Profit                 
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
-// Cross                                                            
+// Cross1                                                             
 //+------------------------------------------------------------------+
 
 // Type: Fixed Template 
@@ -959,20 +926,18 @@ If Output is 2: Line 1 crossed Line 2 from top
 
 */
 
-int Crossed(double close2, double close1, double pipFiniteLine)
+int Crossed1(double line1,double line2)
   {
 
    static int CurrentDirection1=0;
    static int LastDirection1=0;
    static bool FirstTime1=true;
 
-//---- Check crossing using Close[2] and Close[1] vs PipFinite line
-   if(close2>pipFiniteLine && close1<pipFiniteLine)
-      CurrentDirection1=2;  // Downtrend cross: Close crossed below PipFinite line
-   else if(close2<pipFiniteLine && close1>pipFiniteLine)
-      CurrentDirection1=1;  // Uptrend cross: Close crossed above PipFinite line
-   else
-      CurrentDirection1=0;  // No cross
+//----
+   if(line1>line2)
+      CurrentDirection1=1;  // line1 above line2
+   if(line1<line2)
+      CurrentDirection1=2;  // line1 below line2
 //----
    if(FirstTime1==true) // Need to check if this is the first time the function is run
      {
@@ -981,7 +946,107 @@ int Crossed(double close2, double close1, double pipFiniteLine)
       return (0);
      }
 
-   if(CurrentDirection1!=0 && CurrentDirection1!=LastDirection1 && FirstTime1==false) // If not the first time and there is a direction change
+   if(CurrentDirection1!=LastDirection1 && FirstTime1==false) // If not the first time and there is a direction change
+     {
+      LastDirection1=CurrentDirection1; // Set new direction
+      return(CurrentDirection1); // 1 for up, 2 for down
+     }
+   else
+     {
+      return(0);  // No direction change
+     }
+  }
+//+------------------------------------------------------------------+
+// End of Cross                                                      
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+// Cross2                                                             
+//+------------------------------------------------------------------+
+
+// Type: Fixed Template 
+// Do not edit unless you know what you're doing
+
+// This function determines if a cross happened between 2 lines/data set
+
+/* 
+
+If Output is 0: No cross happened
+If Output is 1: Line 1 crossed Line 2 from Bottom
+If Output is 2: Line 1 crossed Line 2 from top 
+
+*/
+
+int Crossed2(double line1,double line2)
+  {
+
+   static int CurrentDirection1=0;
+   static int LastDirection1=0;
+   static bool FirstTime1=true;
+
+//----
+   if(line1>line2)
+      CurrentDirection1=1;  // line1 above line2
+   if(line1<line2)
+      CurrentDirection1=2;  // line1 below line2
+//----
+   if(FirstTime1==true) // Need to check if this is the first time the function is run
+     {
+      FirstTime1=false; // Change variable to false
+      LastDirection1=CurrentDirection1; // Set new direction
+      return (0); // there is no cross happened
+     }
+
+   if(CurrentDirection1!=LastDirection1 && FirstTime1==false) // If not the first time and there is a direction change
+     {
+      LastDirection1=CurrentDirection1; // Set new direction
+      return(CurrentDirection1); // 1 for up, 2 for down
+     }
+   else
+     {
+      return(0);  // No direction change
+     }
+  }
+//+------------------------------------------------------------------+
+// End of Cross                                                      
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+// Cross3                                                          
+//+------------------------------------------------------------------+
+
+// Type: Fixed Template 
+// Do not edit unless you know what you're doing
+
+// This function determines if a cross happened between 2 lines/data set
+
+/* 
+
+If Output is 0: No cross happened
+If Output is 1: Line 1 crossed Line 2 from Bottom
+If Output is 2: Line 1 crossed Line 2 from top 
+
+*/
+
+int Crossed3(double line1,double line2)
+  {
+
+   static int CurrentDirection1=0;
+   static int LastDirection1=0;
+   static bool FirstTime1=true;
+
+//----
+   if(line1>line2)
+      CurrentDirection1=1;  // line1 above line2
+   if(line1<line2)
+      CurrentDirection1=2;  // line1 below line2
+//----
+   if(FirstTime1==true) // Need to check if this is the first time the function is run
+     {
+      FirstTime1=false; // Change variable to false
+      LastDirection1=CurrentDirection1; // Set new direction
+      return (0);
+     }
+
+   if(CurrentDirection1!=LastDirection1 && FirstTime1==false) // If not the first time and there is a direction change
      {
       LastDirection1=CurrentDirection1; // Set new direction
       return(CurrentDirection1); // 1 for up, 2 for down
@@ -1065,7 +1130,7 @@ bool IsVolLimitBreached(bool VolLimitActivated,double VolMulti,int ATR_Timeframe
 //| Set Hidden Stop Loss                                     
 //+------------------------------------------------------------------+
 
-void SetStopLossHidden(bool Journaling,bool isVolatilitySwitchOn,double fixedSL,double VolATR,double volMultiplier,int K,int OrderNum)
+void SetStopLossHidden(bool Journaling,bool isVolatilitySwitchOn,double fixedSL,double VolATR,double volMultiplier,int K,int OrderNum, int & HiddenSLListArray [][])
   { // K represents our P multiplier to adjust for broker digits
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing
@@ -1081,13 +1146,13 @@ void SetStopLossHidden(bool Journaling,bool isVolatilitySwitchOn,double fixedSL,
       StopL=volMultiplier*VolATR/(K*Point); // Stop Loss in Pips
      }
 
-   for(int x=0; x<ArrayRange(HiddenSLList,0); x++) 
+   for(int x=0; x<ArrayRange(HiddenSLListArray,0); x++) 
      { // Number of elements in column 1
-      if(HiddenSLList[x,0]==0) 
+      if(HiddenSLListArray[x,0]==0) 
         { // Checks if the element is empty
-         HiddenSLList[x,0] = OrderNum;
-         HiddenSLList[x,1] = StopL;
-         if(Journaling)Print("EA Journaling: Order "+(string)HiddenSLList[x,0]+" assigned with a hidden SL of "+(string)NormalizeDouble(HiddenSLList[x,1],2)+" pips.");
+         HiddenSLListArray[x,0] = OrderNum;
+         HiddenSLListArray[x,1] = (int)StopL;
+         if(Journaling)Print("EA Journaling: Order "+(string)HiddenSLListArray[x,0]+" assigned with a hidden SL of "+(string)NormalizeDouble(HiddenSLListArray[x,1],2)+" pips.");
          break;
         }
      }
@@ -1098,7 +1163,7 @@ void SetStopLossHidden(bool Journaling,bool isVolatilitySwitchOn,double fixedSL,
 //+------------------------------------------------------------------+
 //| Trigger Hidden Stop Loss                                      
 //+------------------------------------------------------------------+
-void TriggerStopLossHidden(bool Journaling,int Retry_Interval,int Magic,int Slip,int K) 
+void TriggerStopLossHidden(bool Journaling,int Retry_Interval,int Magic,int Slip,int K, int & HiddenSLListArray [][]) 
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing
@@ -1116,11 +1181,11 @@ void TriggerStopLossHidden(bool Journaling,int Retry_Interval,int Magic,int Slip
 // 1) Check the HiddenSLList, match with current list of positions. Make sure the all the positions exists. 
 // If it doesn't, it means there are positions that have been closed
 
-   for(int x=0; x<ArrayRange(HiddenSLList,0); x++) 
+   for(int x=0; x<ArrayRange(HiddenSLListArray,0); x++) 
      { // Looping through all order number in list
 
       doesOrderExist=False;
-      orderTicketNumber=(int)HiddenSLList[x,0];
+      orderTicketNumber=(int)HiddenSLListArray[x,0];
 
       if(orderTicketNumber!=0) 
         { // Order exists
@@ -1138,8 +1203,8 @@ void TriggerStopLossHidden(bool Journaling,int Retry_Interval,int Magic,int Slip
 
          if(doesOrderExist==False) 
            { // Deletes elements if the order number does not match any current positions
-            HiddenSLList[x, 0] = 0;
-            HiddenSLList[x, 1] = 0;
+            HiddenSLListArray[x, 0] = 0;
+            HiddenSLListArray[x, 1] = 0;
            }
         }
 
@@ -1147,11 +1212,11 @@ void TriggerStopLossHidden(bool Journaling,int Retry_Interval,int Magic,int Slip
 
 // 2) Check each position against its hidden SL and close the position if hidden SL is hit
 
-   for(int z=0; z<ArrayRange(HiddenSLList,0); z++) 
+   for(int z=0; z<ArrayRange(HiddenSLListArray,0); z++) 
      { // Loops through elements in the list
 
-      orderTicketNumber=(int)HiddenSLList[z,0]; // Records order numner
-      orderSL=HiddenSLList[z,1]; // Records SL
+      orderTicketNumber=(int)HiddenSLListArray[z,0]; // Records order numner
+      orderSL=HiddenSLListArray[z,1]; // Records SL
 
       if(OrderSelect(orderTicketNumber,SELECT_BY_TICKET)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic) 
         {
@@ -1186,7 +1251,7 @@ void TriggerStopLossHidden(bool Journaling,int Retry_Interval,int Magic,int Slip
 //| Set Hidden Take Profit                                     
 //+------------------------------------------------------------------+
 
-void SetTakeProfitHidden(bool Journaling,bool isVolatilitySwitchOn,double fixedTP,double VolATR,double volMultiplier,int K,int OrderNum)
+void SetTakeProfitHidden(bool Journaling,bool isVolatilitySwitchOn,double fixedTP,double VolATR,double volMultiplier,int K,int OrderNum, int & HiddenTPListArray [][])
   { // K represents our P multiplier to adjust for broker digits
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing
@@ -1202,13 +1267,13 @@ void SetTakeProfitHidden(bool Journaling,bool isVolatilitySwitchOn,double fixedT
       TakeP=volMultiplier*VolATR/(K*Point); // Take Profit in Pips
      }
 
-   for(int x=0; x<ArrayRange(HiddenTPList,0); x++) 
+   for(int x=0; x<ArrayRange(HiddenTPListArray,0); x++) 
      { // Number of elements in column 1
-      if(HiddenTPList[x,0]==0) 
+      if(HiddenTPListArray[x,0]==0) 
         { // Checks if the element is empty
-         HiddenTPList[x,0] = OrderNum;
-         HiddenTPList[x,1] = TakeP;
-         if(Journaling)Print("EA Journaling: Order "+(string)HiddenTPList[x,0]+" assigned with a hidden TP of "+(string)NormalizeDouble(HiddenTPList[x,1],2)+" pips.");
+         HiddenTPListArray[x,0] = OrderNum;
+         HiddenTPListArray[x,1] = (int)TakeP;
+         if(Journaling)Print("EA Journaling: Order "+(string)HiddenTPListArray[x,0]+" assigned with a hidden TP of "+(string)NormalizeDouble(HiddenTPListArray[x,1],2)+" pips.");
          break;
         }
      }
@@ -1219,7 +1284,7 @@ void SetTakeProfitHidden(bool Journaling,bool isVolatilitySwitchOn,double fixedT
 //+------------------------------------------------------------------+
 //| Trigger Hidden Take Profit                                        
 //+------------------------------------------------------------------+
-void TriggerTakeProfitHidden(bool Journaling,int Retry_Interval,int Magic,int Slip,int K) 
+void TriggerTakeProfitHidden(bool Journaling,int Retry_Interval,int Magic,int Slip,int K, int & HiddenTPListArray [][]) 
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing
@@ -1237,11 +1302,11 @@ void TriggerTakeProfitHidden(bool Journaling,int Retry_Interval,int Magic,int Sl
 // 1) Check the HiddenTPList, match with current list of positions. Make sure the all the positions exists. 
 // If it doesn't, it means there are positions that have been closed
 
-   for(int x=0; x<ArrayRange(HiddenTPList,0); x++) 
+   for(int x=0; x<ArrayRange(HiddenTPListArray,0); x++) 
      { // Looping through all order number in list
 
       doesOrderExist=False;
-      orderTicketNumber=(int)HiddenTPList[x,0];
+      orderTicketNumber=(int)HiddenTPListArray[x,0];
 
       if(orderTicketNumber!=0) 
         { // Order exists
@@ -1259,8 +1324,8 @@ void TriggerTakeProfitHidden(bool Journaling,int Retry_Interval,int Magic,int Sl
 
          if(doesOrderExist==False) 
            { // Deletes elements if the order number does not match any current positions
-            HiddenTPList[x, 0] = 0;
-            HiddenTPList[x, 1] = 0;
+            HiddenTPListArray[x, 0] = 0;
+            HiddenTPListArray[x, 1] = 0;
            }
         }
 
@@ -1268,11 +1333,11 @@ void TriggerTakeProfitHidden(bool Journaling,int Retry_Interval,int Magic,int Sl
 
 // 2) Check each position against its hidden TP and close the position if hidden TP is hit
 
-   for(int z=0; z<ArrayRange(HiddenTPList,0); z++) 
+   for(int z=0; z<ArrayRange(HiddenTPListArray,0); z++) 
      { // Loops through elements in the list
 
-      orderTicketNumber=(int)HiddenTPList[z,0]; // Records order numner
-      orderTP=HiddenTPList[z,1]; // Records TP
+      orderTicketNumber=(int)HiddenTPListArray[z,0]; // Records order numner
+      orderTP=HiddenTPListArray[z,1]; // Records TP
 
       if(OrderSelect(orderTicketNumber,SELECT_BY_TICKET)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic) 
         {
@@ -1313,27 +1378,35 @@ void BreakevenStopAll(bool Journaling,int Retry_Interval,double Breakeven_Buffer
 
 // This function sets breakeven stops for all positions
 
+   double SecureProfitPips = Breakeven_Buffer/3; //using 1/3 of Breakeven buffer to secure min profit on that trade
+
    for(int i=OrdersTotal()-1; i>=0; i--)
      {
       bool Modify=false;
       if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic)
         {
          RefreshRates();
-         if(OrderType()==OP_BUY && (Bid-OrderOpenPrice())>(Breakeven_Buffer*K*Point))
+         if(OrderType()==OP_BUY && (Bid-OrderOpenPrice())>((Breakeven_Buffer+SecureProfitPips)*K*Point))
            {
-            if(Journaling)Print("EA Journaling: Trying to modify order "+(string)OrderTicket()+" ...");
-            HandleTradingEnvironment(Journaling,Retry_Interval);
-            Modify=OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice(),OrderTakeProfit(),0,CLR_NONE);
-            if(Journaling && !Modify)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
-            if(Journaling && Modify)Print("EA Journaling: Order successfully modified, breakeven stop updated.");
+               if(OrderOpenPrice() > OrderStopLoss()) //Only modify the order once!
+                 {
+                  if(Journaling)Print("EA Journaling: Trying to modify Buy order "+(string)OrderTicket()+" ...");
+                  HandleTradingEnvironment(Journaling,Retry_Interval);
+                  Modify=OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()+(SecureProfitPips*K*Point),OrderTakeProfit(),0,CLR_NONE);
+                  if(Journaling && !Modify)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
+                  if(Journaling && Modify)Print("EA Journaling: Order successfully modified, breakeven stop updated.");
+                 }
            }
-         if(OrderType()==OP_SELL && (OrderOpenPrice()-Ask)>(Breakeven_Buffer*K*Point))
+         if(OrderType()==OP_SELL && (OrderOpenPrice()-Ask)>((Breakeven_Buffer-SecureProfitPips)*K*Point))
            {
-            if(Journaling)Print("EA Journaling: Trying to modify order "+(string)OrderTicket()+" ...");
-            HandleTradingEnvironment(Journaling,Retry_Interval);
-            Modify=OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice(),OrderTakeProfit(),0,CLR_NONE);
-            if(Journaling && !Modify)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
-            if(Journaling && Modify)Print("EA Journaling: Order successfully modified, breakeven stop updated.");
+                if(OrderOpenPrice() < OrderStopLoss())
+                 {  
+                  if(Journaling)Print("EA Journaling: Trying to modify Sell order "+(string)OrderTicket()+" ...");
+                  HandleTradingEnvironment(Journaling,Retry_Interval);
+                  Modify=OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()-(SecureProfitPips*K*Point),OrderTakeProfit(),0,CLR_NONE);
+                  if(Journaling && !Modify)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
+                  if(Journaling && Modify)Print("EA Journaling: Order successfully modified, breakeven stop updated.");
+                 } 
            }
         }
      }
@@ -1345,7 +1418,7 @@ void BreakevenStopAll(bool Journaling,int Retry_Interval,double Breakeven_Buffer
 //| Update Hidden Breakeven Stops List                                     
 //+------------------------------------------------------------------+
 
-void UpdateHiddenBEList(bool Journaling,int Retry_Interval,int Magic) 
+void UpdateHiddenBEList(bool Journaling,int Retry_Interval,int Magic, int & HiddenBEListArray []) 
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing
@@ -1359,11 +1432,11 @@ void UpdateHiddenBEList(bool Journaling,int Retry_Interval,int Magic)
 // Check the HiddenBEList, match with current list of positions. Make sure the all the positions exists. 
 // If it doesn't, it means there are positions that have been closed
 
-   for(int x=0; x<ArrayRange(HiddenBEList,0); x++)
+   for(int x=0; x<ArrayRange(HiddenBEListArray,0); x++)
      { // Looping through all order number in list
 
       doesPosExist=False;
-      orderTicketNumber=(int)HiddenBEList[x];
+      orderTicketNumber=(int)HiddenBEListArray[x];
 
       if(orderTicketNumber!=0)
         { // Order exists
@@ -1381,7 +1454,7 @@ void UpdateHiddenBEList(bool Journaling,int Retry_Interval,int Magic)
 
          if(doesPosExist==False)
            { // Deletes elements if the order number does not match any current positions
-            HiddenBEList[x]=0;
+            HiddenBEListArray[x]=0;
            }
         }
      }
@@ -1393,7 +1466,7 @@ void UpdateHiddenBEList(bool Journaling,int Retry_Interval,int Magic)
 //| Set and Trigger Hidden Breakeven Stops                                  
 //+------------------------------------------------------------------+
 
-void SetAndTriggerBEHidden(bool Journaling,double Breakeven_Buffer,int Magic,int Slip,int K,int Retry_Interval)
+void SetAndTriggerBEHidden(bool Journaling,double Breakeven_Buffer,int Magic,int Slip,int K,int Retry_Interval, int & HiddenBEListArray [])
   { // K represents our P multiplier to adjust for broker digits
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing
@@ -1414,9 +1487,9 @@ This function scans through the current positions and does 2 things:
         { // Loop through list of current positions
          RefreshRates();
          orderTicketNumber=OrderTicket();
-         for(int x=0; x<ArrayRange(HiddenBEList,0); x++)
+         for(int x=0; x<ArrayRange(HiddenBEListArray,0); x++)
            { // Loops through hidden BE list
-            if(orderTicketNumber==HiddenBEList[x])
+            if(orderTicketNumber==HiddenBEListArray[x])
               { // Checks if the current position is in the list 
                isOrderInBEList=True;
                break;
@@ -1442,14 +1515,14 @@ This function scans through the current positions and does 2 things:
                if(Journaling && Closing)Print("EA Journaling: Position successfully closed due to hidden breakeven stop.");
               }
               } else { // If current position is not in the hidden BE list. We check if we need to add this position to the hidden BE list.
-            if((OrderType()==OP_BUY && (Bid-OrderOpenPrice())>(Breakeven_Buffer*P*Point)) || (OrderType()==OP_SELL && (OrderOpenPrice()-Ask)>(Breakeven_Buffer*P*Point)))
+            if((OrderType()==OP_BUY && (Bid-OrderOpenPrice())>(Breakeven_Buffer*K*Point)) || (OrderType()==OP_SELL && (OrderOpenPrice()-Ask)>(Breakeven_Buffer*K*Point)))
               {
-               for(int y=0; y<ArrayRange(HiddenBEList,0); y++)
+               for(int y=0; y<ArrayRange(HiddenBEListArray,0); y++)
                  { // Loop through of elements in column 1
-                  if(HiddenBEList[y]==0)
+                  if(HiddenBEListArray[y]==0)
                     { // Checks if the element is empty
-                     HiddenBEList[y]= orderTicketNumber;
-                     if(Journaling)Print("EA Journaling: Order "+(string)HiddenBEList[y]+" assigned with a hidden breakeven stop.");
+                     HiddenBEListArray[y]= orderTicketNumber;
+                     if(Journaling)Print("EA Journaling: Order "+(string)HiddenBEListArray[y]+" assigned with a hidden breakeven stop.");
                      break;
                     }
                  }
@@ -1469,6 +1542,14 @@ void TrailingStopAll(bool Journaling,double TrailingStopDist,double TrailingStop
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing 
+/*
+@descr Function is waiting until distance from act.price <> stop loss is greater than TrailingStopDist +  TrailingStopBuff
+       Once this is true, then new stop loss will be maintained to be Bid-TrailingStopDist
+
+@param TrailingStopDist - distance 
+
+*/
+
 
 // This function sets trailing stops for all positions
 
@@ -1504,7 +1585,7 @@ void TrailingStopAll(bool Journaling,double TrailingStopDist,double TrailingStop
 //| Update Hidden Trailing Stops List                                     
 //+------------------------------------------------------------------+
 
-void UpdateHiddenTrailingList(bool Journaling,int Retry_Interval,int Magic) 
+void UpdateHiddenTrailingList(bool Journaling,int Retry_Interval,int Magic, int & HiddenTrailingListArray [][]) 
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing
@@ -1518,11 +1599,11 @@ void UpdateHiddenTrailingList(bool Journaling,int Retry_Interval,int Magic)
 // Check the HiddenTrailingList, match with current list of positions. Make sure the all the positions exists. 
 // If it doesn't, it means there are positions that have been closed
 
-   for(int x=0; x<ArrayRange(HiddenTrailingList,0); x++)
+   for(int x=0; x<ArrayRange(HiddenTrailingListArray,0); x++)
      { // Looping through all order number in list
 
       doesPosExist=False;
-      orderTicketNumber=(int)HiddenTrailingList[x,0];
+      orderTicketNumber=(int)HiddenTrailingListArray[x,0];
 
       if(orderTicketNumber!=0)
         { // Order exists
@@ -1540,8 +1621,8 @@ void UpdateHiddenTrailingList(bool Journaling,int Retry_Interval,int Magic)
 
          if(doesPosExist==False)
            { // Deletes elements if the order number does not match any current positions
-            HiddenTrailingList[x,0] = 0;
-            HiddenTrailingList[x,1] = 0;
+            HiddenTrailingListArray[x,0] = 0;
+            HiddenTrailingListArray[x,1] = 0;
            }
         }
      }
@@ -1553,7 +1634,7 @@ void UpdateHiddenTrailingList(bool Journaling,int Retry_Interval,int Magic)
 //| Set and Trigger Hidden Trailing Stop
 //+------------------------------------------------------------------+
 
-void SetAndTriggerHiddenTrailing(bool Journaling,double TrailingStopDist,double TrailingStopBuff,int Slip,int Retry_Interval,int Magic,int K)
+void SetAndTriggerHiddenTrailing(bool Journaling,double TrailingStopDist,double TrailingStopBuff,int Slip,int Retry_Interval,int Magic,int K, int & HiddenTrailingListArray [][])
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing 
@@ -1574,17 +1655,17 @@ void SetAndTriggerHiddenTrailing(bool Journaling,double TrailingStopDist,double 
 
          // Step 1: Check if there is any hidden trailing stop records pertaining to this order. If yes, check if we need to close the order.
 
-         for(int x=0; x<ArrayRange(HiddenTrailingList,0); x++) 
+         for(int x=0; x<ArrayRange(HiddenTrailingListArray,0); x++) 
            { // Looping through all order number in list 
 
-            if(posTicketNumber==HiddenTrailingList[x,0]) 
+            if(posTicketNumber==HiddenTrailingListArray[x,0]) 
               { // If condition holds, it means the position have a hidden trailing stop level attached to it
 
                doesHiddenTrailingRecordExist=True;
                bool Closing=false;
                RefreshRates();
 
-               if(OrderType()==OP_BUY && HiddenTrailingList[x,1]>=Bid) 
+               if(OrderType()==OP_BUY && HiddenTrailingListArray[x,1]>=Bid) 
                  {
 
                   if(Journaling)Print("EA Journaling: Trying to close position "+(string)OrderTicket()+" using hidden trailing stop...");
@@ -1593,7 +1674,7 @@ void SetAndTriggerHiddenTrailing(bool Journaling,double TrailingStopDist,double 
                   if(Journaling && !Closing)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
                   if(Journaling && Closing)Print("EA Journaling: Position successfully closed due to hidden trailing stop.");
 
-                    } else if(OrderType()==OP_SELL && HiddenTrailingList[x,1]<=Ask) {
+                    } else if(OrderType()==OP_SELL && HiddenTrailingListArray[x,1]<=Ask) {
 
                   if(Journaling)Print("EA Journaling: Trying to close position "+(string)OrderTicket()+" using hidden trailing stop...");
                   HandleTradingEnvironment(Journaling,Retry_Interval);
@@ -1605,15 +1686,15 @@ void SetAndTriggerHiddenTrailing(bool Journaling,double TrailingStopDist,double 
 
                   // Step 2: If there are hidden trailing stop records and the position was not closed in Step 1. We update the hidden trailing stop record.
 
-                  if(OrderType()==OP_BUY && (Bid-HiddenTrailingList[x,1]>(TrailingStopDist+TrailingStopBuff)*K*Point)) 
+                  if(OrderType()==OP_BUY && (Bid-HiddenTrailingListArray[x,1]>(TrailingStopDist+TrailingStopBuff)*K*Point)) 
                     {
-                     HiddenTrailingList[x,1]=Bid-TrailingStopDist*K*Point; // Assigns new hidden trailing stop level
-                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden trailing stop updated to "+(string)NormalizeDouble(HiddenTrailingList[x,1],Digits)+".");
+                     HiddenTrailingListArray[x,1]=(int)(Bid-TrailingStopDist*K*Point); // Assigns new hidden trailing stop level
+                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden trailing stop updated to "+(string)NormalizeDouble(HiddenTrailingListArray[x,1],Digits)+".");
                     }
-                  if(OrderType()==OP_SELL && (HiddenTrailingList[x,1]-Ask>((TrailingStopDist+TrailingStopBuff)*K*Point))) 
+                  if(OrderType()==OP_SELL && (HiddenTrailingListArray[x,1]-Ask>((TrailingStopDist+TrailingStopBuff)*K*Point))) 
                     {
-                     HiddenTrailingList[x,1]=Ask+TrailingStopDist*K*Point; // Assigns new hidden trailing stop level
-                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden trailing stop updated "+(string)NormalizeDouble(HiddenTrailingList[x,1],Digits)+".");
+                     HiddenTrailingListArray[x,1]=(int)(Ask+TrailingStopDist*K*Point); // Assigns new hidden trailing stop level
+                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden trailing stop updated "+(string)NormalizeDouble(HiddenTrailingListArray[x,1],Digits)+".");
                     }
                  }
                break;
@@ -1625,23 +1706,23 @@ void SetAndTriggerHiddenTrailing(bool Journaling,double TrailingStopDist,double 
          if(doesHiddenTrailingRecordExist==False) 
            {
 
-            for(int y=0; y<ArrayRange(HiddenTrailingList,0); y++) 
+            for(int y=0; y<ArrayRange(HiddenTrailingListArray,0); y++) 
               { // Looping through list 
 
-               if(HiddenTrailingList[y,0]==0) 
+               if(HiddenTrailingListArray[y,0]==0) 
                  { // Slot is empty
 
                   RefreshRates();
-                  HiddenTrailingList[y,0]=posTicketNumber; // Assigns Order Number
+                  HiddenTrailingListArray[y,0]=posTicketNumber; // Assigns Order Number
                   if(OrderType()==OP_BUY) 
                     {
-                     HiddenTrailingList[y,1]=MathMax(Bid,OrderOpenPrice())-TrailingStopDist*K*Point; // Hidden trailing stop level = Higher of Bid or OrderOpenPrice - Trailing Stop Distance
-                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden trailing stop added. Trailing Stop = "+(string)NormalizeDouble(HiddenTrailingList[y,1],Digits)+".");
+                     HiddenTrailingListArray[y,1]=(int)(MathMax(Bid,OrderOpenPrice())-TrailingStopDist*K*Point); // Hidden trailing stop level = Higher of Bid or OrderOpenPrice - Trailing Stop Distance
+                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden trailing stop added. Trailing Stop = "+(string)NormalizeDouble(HiddenTrailingListArray[y,1],Digits)+".");
                     }
                   if(OrderType()==OP_SELL) 
                     {
-                     HiddenTrailingList[y,1]=MathMin(Ask,OrderOpenPrice())+TrailingStopDist*K*Point; // Hidden trailing stop level = Lower of Ask or OrderOpenPrice + Trailing Stop Distance
-                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden trailing stop added. Trailing Stop = "+(string)NormalizeDouble(HiddenTrailingList[y,1],Digits)+".");
+                     HiddenTrailingListArray[y,1]=(int)(MathMin(Ask,OrderOpenPrice())+TrailingStopDist*K*Point); // Hidden trailing stop level = Lower of Ask or OrderOpenPrice + Trailing Stop Distance
+                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden trailing stop added. Trailing Stop = "+(string)NormalizeDouble(HiddenTrailingListArray[y,1],Digits)+".");
                     }
                   break;
                  }
@@ -1658,7 +1739,7 @@ void SetAndTriggerHiddenTrailing(bool Journaling,double TrailingStopDist,double 
 //| Update Volatility Trailing Stops List                                     
 //+------------------------------------------------------------------+
 
-void UpdateVolTrailingList(bool Journaling,int Retry_Interval,int Magic) 
+void UpdateVolTrailingList(bool Journaling,int Retry_Interval,int Magic, int & VolTrailingListArray [][]) 
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing
@@ -1672,11 +1753,11 @@ void UpdateVolTrailingList(bool Journaling,int Retry_Interval,int Magic)
 // Check the VolTrailingList, match with current list of positions. Make sure the all the positions exists. 
 // If it doesn't, it means there are positions that have been closed
 
-   for(int x=0; x<ArrayRange(VolTrailingList,0); x++)
+   for(int x=0; x<ArrayRange(VolTrailingListArray,0); x++)
      { // Looping through all order number in list
 
       doesPosExist=False;
-      orderTicketNumber=(int)VolTrailingList[x,0];
+      orderTicketNumber=(int)VolTrailingListArray[x,0];
 
       if(orderTicketNumber!=0)
         { // Order exists
@@ -1694,8 +1775,8 @@ void UpdateVolTrailingList(bool Journaling,int Retry_Interval,int Magic)
 
          if(doesPosExist==False)
            { // Deletes elements if the order number does not match any current positions
-            VolTrailingList[x,0] = 0;
-            VolTrailingList[x,1] = 0;
+            VolTrailingListArray[x,0] = 0;
+            VolTrailingListArray[x,1] = 0;
            }
         }
      }
@@ -1704,10 +1785,181 @@ void UpdateVolTrailingList(bool Journaling,int Retry_Interval,int Magic)
 //| End of Update Volatility Trailing Stops List                                          
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
+//| Update DSS Info List                                     
+//+------------------------------------------------------------------+
+
+void UpdateDSSInfoList(bool Journaling,int Retry_Interval,int Magic, int & infoArray [][]) 
+  {
+// Type: Fixed Template 
+// Do not edit unless you know what you're doing
+
+// This function clears the elements of your DSSInfoList if the corresponding positions has been closed
+
+   int ordersPos=OrdersTotal();
+   int orderTicketNumber;
+   bool doesPosExist;
+
+// Check the DSSInfoList, match with current list of positions. Make sure the all the positions exists. 
+// If it doesn't, it means there are positions that have been closed
+
+   for(int x=0; x<ArrayRange(infoArray,0); x++)
+     { // Looping through all order number in list
+
+      doesPosExist=False;
+      orderTicketNumber=infoArray[x,0];
+      
+
+      if(orderTicketNumber!=0)
+        { // Order exists
+         for(int y=ordersPos-1; y>=0; y--)
+           { // Looping through all current open positions
+            if(OrderSelect(y,SELECT_BY_POS,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic)
+              {
+               if(orderTicketNumber==OrderTicket())
+                 { // Checks order number in list against order number of current positions
+                  doesPosExist=True;
+                  break;
+                 }
+              }
+           }
+
+         if(doesPosExist==False)
+           { // Deletes elements if the order number does not match any current positions
+            infoArray[x,0] = 0;
+            infoArray[x,1] = 0;
+            infoArray[x,2] = 0;
+           }
+        }
+     }
+  }
+//+------------------------------------------------------------------+
+//| End of Update DSS Info List                                           
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Set DSSInfoList
+//+------------------------------------------------------------------+
+
+void SetDSSInfoList(bool Journaling, int MyTimeHold, int MyMT, int tkt, int Magic, int & infoArray [][])
+  {
+// Type: Fixed Template 
+// Do not edit unless you know what you're doing 
+
+//SetDSSInfoList(OnJournaling,AItimehold,MyMarketType, OrderNumber, MagicNumber);
+
+// This function adds new Time to hold order and market type records to array
+
+   for(int x=0; x<ArraySize(infoArray); x++) // Loop through elements in DSSInfoList
+     { 
+      if(infoArray[x,0]==0 && tkt > 0)  // Checks if the element is empty and the ticket is not -1
+        { 
+         infoArray[x,0] = tkt; // Add order number
+         infoArray[x,1] = MyTimeHold; // Add Time to hold the order in Hours 
+         infoArray[x,2] = MyMT; // Add predicted Market Type
+         if(Journaling)Print("EA Journaling: For Magic Number... " + (string)Magic + " and the Order "+(string)infoArray[x,0]+
+                             " we assign a Time to hold the order in Minutes "+(string)infoArray[x,1]+";"+" predicted MarketType is: "+(string)infoArray[x,2]);
+         break;
+        }
+     }
+  }
+//+------------------------------------------------------------------+
+//| End of Set DSSInfoList
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Restore DSSInfoList
+//+------------------------------------------------------------------+
+
+void RestoreDSSInfoList(string symbol, int magic, int & infoArray [][])
+  {
+/* 
+@purpose: Function is needed to restore position of DSSInfoList Arrays in case of abrupt EA closure. In cases when there will be some open orders we will 
+want to restore this array using information from the flat file
+
+@description Need to:
+- read file and read content: ticket and other info
+- read open orders and retrieve their tickets, filter by magic number and symbol
+- compare: if ticket number match is found then populate the array 
+
+@detail: a very complicated function containing several for-loops
+
+*/
+int handle;
+string str;
+string sep=",";              // A separator as a character 
+ushort u_sep;                // The code of the separator character 
+string result[];             // An array to get string elements
+string full_line;            // String reserved for a file string
+
+//Read content of the file, store content into the array 'result[]'
+handle=FileOpen("MarketTypeLog"+IntegerToString(magic)+".csv",FILE_READ|FILE_SHARE_READ);
+if(handle==-1){
+   Comment("Error - file does not exist");
+   Sleep(200); //attempt to read again
+   handle=FileOpen("MarketTypeLog"+IntegerToString(magic)+".csv",FILE_READ|FILE_SHARE_READ);
+   if(handle == -1){Comment("Tried 2 times, file with log does not exists!"); str = "-1"; }
+   } 
+if(FileSize(handle)==0){FileClose(handle); Comment("Error - File MarketTypeLog is empty"); }
+
+       // analyse the content of each string line by line
+      while(!FileIsEnding(handle))
+      {
+            str=FileReadString(handle); //storing content of the current line
+            //full current line
+            full_line = StringSubstr(str,0);
+            //--- Get the separator code 
+            u_sep=StringGetCharacter(sep,0); 
+            //--- Split the string to substrings and store to the array result[] 
+            int k = StringSplit(str,u_sep,result); 
+            // array result will contain only 1 line, we must perform data manipulation for each line and only then to close file
+               //Go trough all open orders, filter and get the ticket number
+                for(int i=OrdersTotal()-1; i>=0; i--) 
+                 {
+                  if(OrderSelect(i,SELECT_BY_POS, MODE_TRADES)==true && OrderSymbol() == symbol && OrderMagicNumber() == magic)
+                    {
+                     //extract ticket number
+                     int tkt = OrderTicket();
+                     //create another for loop to scroll through the content of the array result
+                     for(int y=0;y<ArraySize(result);y++)
+                       {
+                        //check if array result contains tkt
+                        if(StringToInteger(result[y])== tkt)
+                          {
+                           //find element of array equals to 0 (free to use)
+                           for(int j=0;j<ArrayRange(infoArray,0);j++)
+                             {
+                              if(infoArray[j,0] == 0 && infoArray[j,1] == 0 && infoArray[j,2] == 0)
+                                {
+                                 //store this ticket in array
+                                 infoArray[j,0] = tkt;
+                                 //store next element (time to hold) in the same array
+                                 infoArray[j,1] = (int)StringToInteger(result[y+2]);
+                                 //store next element (market type) in the same array
+                                 infoArray[j,2] = (int)StringToInteger(result[y+1]);
+                                 //debugging: write_debug_array()
+                                 break; //exit this for loop as we have already populated free element of array
+                                }
+                             } //end of for loop to scroll through DSSListArray
+                          }
+                       } //end of for loop to scroll through array result
+                    }
+                 } //end of for loop to scroll through order position
+            
+            
+            
+      }
+      FileClose(handle);
+
+
+
+
+  }
+//+------------------------------------------------------------------+
+//| End of Restore DSSInfoList
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //| Set Volatility Trailing Stop
 //+------------------------------------------------------------------+
 
-void SetVolTrailingStop(bool Journaling,int Retry_Interval,double VolATR,double VolTrailingDistMulti,int Magic,int K,int OrderNum)
+void SetVolTrailingStop(bool Journaling,int Retry_Interval,double VolATR,double VolTrailingDistMulti,int Magic,int K,int OrderNum, int & VolTrailingListArray [][])
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing 
@@ -1745,12 +1997,12 @@ void SetVolTrailingStop(bool Journaling,int Retry_Interval,double VolATR,double 
       // Records volatility measure (ATR value) for future use
       if(IsVolTrailingStopAdded==True) 
          {
-         for(int x=0; x<ArrayRange(VolTrailingList,0); x++) // Loop through elements in VolTrailingList
+         for(int x=0; x<ArrayRange(VolTrailingListArray,0); x++) // Loop through elements in VolTrailingList
            { 
-            if(VolTrailingList[x,0]==0)  // Checks if the element is empty
+            if(VolTrailingListArray[x,0]==0)  // Checks if the element is empty
               { 
-               VolTrailingList[x,0]=OrderNum; // Add order number
-               VolTrailingList[x,1]=VolATR/(K*Point); // Add volatility measure aka 1 unit of ATR
+               VolTrailingListArray[x,0]=OrderNum; // Add order number
+               VolTrailingListArray[x,1]=(int)(VolATR/(K*Point)); // Add volatility measure aka 1 unit of ATR
                break;
               }
            }
@@ -1764,7 +2016,7 @@ void SetVolTrailingStop(bool Journaling,int Retry_Interval,double VolATR,double 
 //| Review Hidden Volatility Trailing Stop
 //+------------------------------------------------------------------+
 
-void ReviewVolTrailingStop(bool Journaling, double VolTrailingDistMulti, double VolTrailingBuffMulti, int Retry_Interval, int Magic, int K)
+void ReviewVolTrailingStop(bool Journaling, double VolTrailingDistMulti, double VolTrailingBuffMulti, int Retry_Interval, int Magic, int K, int & VolTrailingListArray [][])
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing 
@@ -1782,10 +2034,10 @@ void ReviewVolTrailingStop(bool Journaling, double VolTrailingDistMulti, double 
          doesVolTrailingRecordExist = False;
          posTicketNumber=OrderTicket();
 
-         for(int x=0; x<ArrayRange(VolTrailingList,0); x++) 
+         for(int x=0; x<ArrayRange(VolTrailingListArray,0); x++) 
            { // Looping through all order number in list 
 
-            if(posTicketNumber==VolTrailingList[x,0]) 
+            if(posTicketNumber==VolTrailingListArray[x,0]) 
               { // If condition holds, it means the position have a volatility trailing stop level attached to it
 
                doesVolTrailingRecordExist = True; 
@@ -1793,19 +2045,19 @@ void ReviewVolTrailingStop(bool Journaling, double VolTrailingDistMulti, double 
                RefreshRates();
 
                // We update the volatility trailing stop record using OrderModify.
-               if(OrderType()==OP_BUY && (Bid-OrderStopLoss()>(VolTrailingDistMulti*VolTrailingList[x,1]+VolTrailingBuffMulti*VolTrailingList[x,1])*K*Point))
+               if(OrderType()==OP_BUY && (Bid-OrderStopLoss()>(VolTrailingDistMulti*VolTrailingListArray[x,1]+VolTrailingBuffMulti*VolTrailingListArray[x,1])*K*Point))
                  {
                   if(Journaling)Print("EA Journaling: Trying to modify order "+(string)OrderTicket()+" ...");
                   HandleTradingEnvironment(Journaling,Retry_Interval);
-                  Modify=OrderModify(OrderTicket(),OrderOpenPrice(),Bid-VolTrailingDistMulti*VolTrailingList[x,1]*K*Point,OrderTakeProfit(),0,CLR_NONE);
+                  Modify=OrderModify(OrderTicket(),OrderOpenPrice(),Bid-VolTrailingDistMulti*VolTrailingListArray[x,1]*K*Point,OrderTakeProfit(),0,CLR_NONE);
                   if(Journaling && !Modify)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
                   if(Journaling && Modify)Print("EA Journaling: Order successfully modified, volatility trailing stop changed.");
                  }
-               if(OrderType()==OP_SELL && ((OrderStopLoss()-Ask>((VolTrailingDistMulti*VolTrailingList[x,1]+VolTrailingBuffMulti*VolTrailingList[x,1])*K*Point)) || (OrderStopLoss()==0)))
+               if(OrderType()==OP_SELL && ((OrderStopLoss()-Ask>((VolTrailingDistMulti*VolTrailingListArray[x,1]+VolTrailingBuffMulti*VolTrailingListArray[x,1])*K*Point)) || (OrderStopLoss()==0)))
                  {
                   if(Journaling)Print("EA Journaling: Trying to modify order "+(string)OrderTicket()+" ...");
                   HandleTradingEnvironment(Journaling,Retry_Interval);
-                  Modify=OrderModify(OrderTicket(),OrderOpenPrice(),Ask+VolTrailingDistMulti*VolTrailingList[x,1]*K*Point,OrderTakeProfit(),0,CLR_NONE);
+                  Modify=OrderModify(OrderTicket(),OrderOpenPrice(),Ask+VolTrailingDistMulti*VolTrailingListArray[x,1]*K*Point,OrderTakeProfit(),0,CLR_NONE);
                   if(Journaling && !Modify)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
                   if(Journaling && Modify)Print("EA Journaling: Order successfully modified, volatility trailing stop changed.");
                  }
@@ -1824,7 +2076,7 @@ void ReviewVolTrailingStop(bool Journaling, double VolTrailingDistMulti, double 
 //| Update Hidden Volatility Trailing Stops List                                     
 //+------------------------------------------------------------------+
 
-void UpdateHiddenVolTrailingList(bool Journaling,int Retry_Interval,int Magic) 
+void UpdateHiddenVolTrailingList(bool Journaling,int Retry_Interval,int Magic, int & HiddenVolTrailingListArray [][]) 
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing
@@ -1838,11 +2090,11 @@ void UpdateHiddenVolTrailingList(bool Journaling,int Retry_Interval,int Magic)
 // Check the HiddenVolTrailingList, match with current list of positions. Make sure the all the positions exists. 
 // If it doesn't, it means there are positions that have been closed
 
-   for(int x=0; x<ArrayRange(HiddenVolTrailingList,0); x++)
+   for(int x=0; x<ArrayRange(HiddenVolTrailingListArray,0); x++)
      { // Looping through all order number in list
 
       doesPosExist=False;
-      orderTicketNumber=(int)HiddenVolTrailingList[x,0];
+      orderTicketNumber=(int)HiddenVolTrailingListArray[x,0];
 
       if(orderTicketNumber!=0)
         { // Order exists
@@ -1860,9 +2112,9 @@ void UpdateHiddenVolTrailingList(bool Journaling,int Retry_Interval,int Magic)
 
          if(doesPosExist==False)
            { // Deletes elements if the order number does not match any current positions
-            HiddenVolTrailingList[x,0] = 0;
-            HiddenVolTrailingList[x,1] = 0;
-            HiddenVolTrailingList[x,2] = 0;
+            HiddenVolTrailingListArray[x,0] = 0;
+            HiddenVolTrailingListArray[x,1] = 0;
+            HiddenVolTrailingListArray[x,2] = 0;
            }
         }
      }
@@ -1874,14 +2126,14 @@ void UpdateHiddenVolTrailingList(bool Journaling,int Retry_Interval,int Magic)
 //| Set Hidden Volatility Trailing Stop
 //+------------------------------------------------------------------+
 
-void SetHiddenVolTrailing(bool Journaling,double VolATR,double VolTrailingDistMultiplierHidden,int Magic,int K,int OrderNum)
+void SetHiddenVolTrailing(bool Journaling,double VolATR,double VolTrailingDistMultiplierHidden,int Magic,int K,int OrderNum, int & HiddenVolTrailingListArray [][])
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing 
 
 // This function adds new hidden volatility trailing stop record 
 
-   double VolTrailingStopLevel;
+   double VolTrailingStopLevel = 0;
    double VolTrailingStopDist;
 
    VolTrailingStopDist=VolTrailingDistMultiplierHidden*VolATR/(K*Point); // Volatility trailing stop amount in Pips
@@ -1894,14 +2146,14 @@ void SetHiddenVolTrailing(bool Journaling,double VolATR,double VolTrailingDistMu
      
      }
 
-   for(int x=0; x<ArrayRange(HiddenVolTrailingList,0); x++) // Loop through elements in HiddenVolTrailingList
+   for(int x=0; x<ArrayRange(HiddenVolTrailingListArray,0); x++) // Loop through elements in HiddenVolTrailingList
      { 
-      if(HiddenVolTrailingList[x,0]==0)  // Checks if the element is empty
+      if(HiddenVolTrailingListArray[x,0]==0)  // Checks if the element is empty
         { 
-         HiddenVolTrailingList[x,0] = OrderNum; // Add order number
-         HiddenVolTrailingList[x,1] = VolTrailingStopLevel; // Add volatility trailing stop level 
-         HiddenVolTrailingList[x,2] = VolATR/(K*Point); // Add volatility measure aka 1 unit of ATR
-         if(Journaling)Print("EA Journaling: Order "+(string)HiddenVolTrailingList[x,0]+" assigned with a hidden volatility trailing stop level of "+(string)NormalizeDouble(HiddenVolTrailingList[x,1],Digits)+".");
+         HiddenVolTrailingListArray[x,0] = OrderNum; // Add order number
+         HiddenVolTrailingListArray[x,1] = (int)VolTrailingStopLevel; // Add volatility trailing stop level 
+         HiddenVolTrailingListArray[x,2] = (int)(VolATR/(K*Point)); // Add volatility measure aka 1 unit of ATR
+         if(Journaling)Print("EA Journaling: Order "+(string)HiddenVolTrailingListArray[x,0]+" assigned with a hidden volatility trailing stop level of "+(string)NormalizeDouble(HiddenVolTrailingListArray[x,1],Digits)+".");
          break;
         }
      }
@@ -1913,7 +2165,7 @@ void SetHiddenVolTrailing(bool Journaling,double VolATR,double VolTrailingDistMu
 //| Trigger and Review Hidden Volatility Trailing Stop
 //+------------------------------------------------------------------+
 
-void TriggerAndReviewHiddenVolTrailing(bool Journaling, double VolTrailingDistMultiplierHidden, double VolTrailingBuffMultiplierHidden, int Slip, int Retry_Interval, int Magic, int K)
+void TriggerAndReviewHiddenVolTrailing(bool Journaling, double VolTrailingDistMultiplierHidden, double VolTrailingBuffMultiplierHidden, int Slip, int Retry_Interval, int Magic, int K, int & HiddenVolTrailingListArray [][])
   {
 // Type: Fixed Template 
 // Do not edit unless you know what you're doing 
@@ -1933,17 +2185,17 @@ void TriggerAndReviewHiddenVolTrailing(bool Journaling, double VolTrailingDistMu
 
          // 1) Check if we need to close the order.
 
-         for(int x=0; x<ArrayRange(HiddenVolTrailingList,0); x++) 
+         for(int x=0; x<ArrayRange(HiddenVolTrailingListArray,0); x++) 
            { // Looping through all order number in list 
 
-            if(posTicketNumber==HiddenVolTrailingList[x,0]) 
+            if(posTicketNumber==HiddenVolTrailingListArray[x,0]) 
               { // If condition holds, it means the position have a hidden volatility trailing stop level attached to it
 
                doesHiddenVolTrailingRecordExist = True; 
                bool Closing=false;
                RefreshRates();
 
-               if(OrderType()==OP_BUY && HiddenVolTrailingList[x,1]>=Bid) 
+               if(OrderType()==OP_BUY && HiddenVolTrailingListArray[x,1]>=Bid) 
                  {
 
                   if(Journaling)Print("EA Journaling: Trying to close position "+(string)OrderTicket()+" using hidden volatility trailing stop...");
@@ -1952,7 +2204,7 @@ void TriggerAndReviewHiddenVolTrailing(bool Journaling, double VolTrailingDistMu
                   if(Journaling && !Closing)Print("EA Journaling: Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
                   if(Journaling && Closing)Print("EA Journaling: Position successfully closed due to hidden volatility trailing stop.");
 
-                    } else if (OrderType()==OP_SELL && HiddenVolTrailingList[x,1]<=Ask) {
+                    } else if (OrderType()==OP_SELL && HiddenVolTrailingListArray[x,1]<=Ask) {
 
                   if(Journaling)Print("EA Journaling: Trying to close position "+(string)OrderTicket()+" using hidden volatility trailing stop...");
                   HandleTradingEnvironment(Journaling,Retry_Interval);
@@ -1964,15 +2216,15 @@ void TriggerAndReviewHiddenVolTrailing(bool Journaling, double VolTrailingDistMu
 
                   // 2) If orders was not closed in 1), we update the hidden volatility trailing stop record.
 
-                  if(OrderType()==OP_BUY && (Bid-HiddenVolTrailingList[x,1]>(VolTrailingDistMultiplierHidden*HiddenVolTrailingList[x,2]+VolTrailingBuffMultiplierHidden*HiddenVolTrailingList[x,2])*K*Point)) 
+                  if(OrderType()==OP_BUY && (Bid-HiddenVolTrailingListArray[x,1]>(VolTrailingDistMultiplierHidden*HiddenVolTrailingListArray[x,2]+VolTrailingBuffMultiplierHidden*HiddenVolTrailingListArray[x,2])*K*Point)) 
                     {
-                     HiddenVolTrailingList[x,1]=Bid-VolTrailingDistMultiplierHidden*HiddenVolTrailingList[x,2]*K*Point; // Assigns new hidden trailing stop level
-                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden volatility trailing stop updated to "+(string)NormalizeDouble(HiddenVolTrailingList[x,1],Digits)+".");
+                     HiddenVolTrailingListArray[x,1]=(int)(Bid-VolTrailingDistMultiplierHidden*HiddenVolTrailingListArray[x,2]*K*Point); // Assigns new hidden trailing stop level
+                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden volatility trailing stop updated to "+(string)NormalizeDouble(HiddenVolTrailingListArray[x,1],Digits)+".");
                     }
-                  if(OrderType()==OP_SELL && (HiddenVolTrailingList[x,1]-Ask>(VolTrailingDistMultiplierHidden*HiddenVolTrailingList[x,2]+VolTrailingBuffMultiplierHidden*HiddenVolTrailingList[x,2])*K*Point))
+                  if(OrderType()==OP_SELL && (HiddenVolTrailingListArray[x,1]-Ask>(VolTrailingDistMultiplierHidden*HiddenVolTrailingListArray[x,2]+VolTrailingBuffMultiplierHidden*HiddenVolTrailingListArray[x,2])*K*Point))
                     {
-                     HiddenVolTrailingList[x,1]=Ask+VolTrailingDistMultiplierHidden*HiddenVolTrailingList[x,2]*K*Point; // Assigns new hidden trailing stop level
-                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden volatility trailing stop updated "+(string)NormalizeDouble(HiddenVolTrailingList[x,1],Digits)+".");
+                     HiddenVolTrailingListArray[x,1]=(int)(Ask+VolTrailingDistMultiplierHidden*HiddenVolTrailingListArray[x,2]*K*Point); // Assigns new hidden trailing stop level
+                     if(Journaling)Print("EA Journaling: Order "+(string)posTicketNumber+" successfully modified, hidden volatility trailing stop updated "+(string)NormalizeDouble(HiddenVolTrailingListArray[x,1],Digits)+".");
                     }
                  }
                break;
@@ -2122,6 +2374,40 @@ string GetErrorDescription(int error)
       case 4205:  ErrorDescription = "Object coordinates error";                                                break;
       case 4206:  ErrorDescription = "No specified subwindow";                                                  break;
       case 4207:  ErrorDescription = "Some error in object function";                                           break;
+      case 5001:  ErrorDescription = "ERR_FILE_TOO_MANY_OPENED || Too many opened files";                       break;
+      case 5002:  ErrorDescription = "ERR_FILE_WRONG_FILENAME || Wrong file name";                              break;
+      case 5003:  ErrorDescription = "ERR_FILE_TOO_LONG_FILENAME || Too long file name";                        break;
+      case 5004:  ErrorDescription = "ERR_FILE_CANNOT_OPEN || Cannot open file";                                break;
+      case 5005:  ErrorDescription = "ERR_FILE_BUFFER_ALLOCATION_ERROR || Text file buffer allocation error";   break;
+      case 5006:  ErrorDescription = "ERR_FILE_CANNOT_DELETE || Cannot delete file";                            break;
+      case 5007:  ErrorDescription = "ERR_FILE_INVALID_HANDLE || File closed or was not opened";                break;
+      case 5008:  ErrorDescription = "ERR_FILE_WRONG_HANDLE || Handle index is out of handle table";            break;
+      case 5009:  ErrorDescription = "ERR_FILE_NOT_TOWRITE || File must be opened with FILE_WRITE flag";        break;
+      case 5010:  ErrorDescription = "ERR_FILE_NOT_TOREAD || File must be opened with FILE_READ flag";          break;
+      case 5011:  ErrorDescription = "ERR_FILE_NOT_BIN || File must be opened with FILE_BIN flag";              break;
+      case 5012:  ErrorDescription = "ERR_FILE_NOT_TXT || File must be opened with FILE_TXT flag";              break;
+      case 5013:  ErrorDescription = "File must be opened with FILE_TXT or FILE_CSV flag";                      break;
+      case 5014:  ErrorDescription = "ERR_FILE_NOT_CSV || File must be opened with FILE_CSV flag";              break;
+      case 5015:  ErrorDescription = "ERR_FILE_READ_ERROR || File read error";                                  break;
+      case 5016:  ErrorDescription = "ERR_FILE_WRITE_ERROR || File write error";                                break;
+      case 5017:  ErrorDescription = "ERR_FILE_BIN_STRINGSIZE||String size must be specified for binary file";  break;
+      case 5018:  ErrorDescription = "Incompatible file (for string arrays-TXT, for others-BIN)";               break;
+      case 5019:  ErrorDescription = "ERR_FILE_IS_DIRECTORY || File is directory not file";                     break;
+      case 5020:  ErrorDescription = "ERR_FILE_NOT_EXIST || File does not exist";                               break;
+      case 5021:  ErrorDescription = "ERR_FILE_CANNOT_REWRITE || File cannot be rewritten";                     break;
+      case 5022:  ErrorDescription = "ERR_FILE_WRONG_DIRECTORYNAME || Wrong directory name";                    break;
+      case 5023:  ErrorDescription = "ERR_FILE_DIRECTORY_NOT_EXIST || Directory does not exist";                break;
+      case 5024:  ErrorDescription = "ERR_FILE_NOT_DIRECTORY || Specified file is not directory";               break;
+      case 5025:  ErrorDescription = "ERR_FILE_CANNOT_DELETE_DIRECTORY || Cannot delete directory";             break;
+      case 5026:  ErrorDescription = "ERR_FILE_CANNOT_CLEAN_DIRECTORY || Cannot clean directory";               break;
+      case 5027:  ErrorDescription = "ERR_FILE_ARRAYRESIZE_ERROR || Array resize error";                        break;
+      case 5028:  ErrorDescription = "ERR_FILE_STRINGRESIZE_ERROR || String resize error";                      break;
+      case 5029:  ErrorDescription = "Structure contains strings or dynamic arrays";                            break;
+      case 5200:  ErrorDescription = "ERR_WEBREQUEST_INVALID_ADDRESS || Invalid URL";                           break;
+      case 5201:  ErrorDescription = "ERR_WEBREQUEST_CONNECT_FAILED || Failed to connect to specified URL";     break;
+      case 5202:  ErrorDescription = "ERR_WEBREQUEST_TIMEOUT || Timeout exceeded";                              break;      
+      case 5203:  ErrorDescription = "ERR_WEBREQUEST_REQUEST_FAILED || HTTP request failed";                    break;
+      case 65536: ErrorDescription = "ERR_USER_ERROR_FIRST || User defined errors start with this code";        break;
       default:    ErrorDescription = "No error or error is unknown";
      }
    return(ErrorDescription);
@@ -2129,3 +2415,541 @@ string GetErrorDescription(int error)
 //+------------------------------------------------------------------+
 //| End of ERROR DESCRIPTION                                         
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| GetTradeFlagCondition                                              
+//+------------------------------------------------------------------+
+/*
+New condition 2021-01-18
+*/
+bool GetTradeFlagConditionDSS_Bot(double ExpectedMoveLF, //predicted change from DSS
+                           double ExpectedMoveHF,
+                           double EntryTradeTriggerLF,//absolute value to enter trade
+                           double EntryTradeTriggerHF,
+                           double ModelQualityLF, //achieved model quality
+                           double ModelQualityHF,
+                           double MinModQualityLF, //min model performance to use value of 1st quantile from StrTest- files
+                           double MinModQualityHF,
+                           int    MT, //Market Type
+                           double MTConfidence,  // Achieved prediction confidence for Market Type
+                           string DirectionCheck,  //which direction to check "buy" "sell"
+                           bool   OptTwoModels)    //option to use two models for trading decision
+  {
+// This function checks trade flag based on hard coded logic and return either false or true
+
+
+
+   bool result=False;
+   bool Bull = False;
+   bool Bear = False;
+   if( (MT == 3) || (MT == 4) || (MT == 5) || (MT == 6)) Bear = True;
+   if( (MT == 1) || (MT == 2) || (MT == 5) || (MT == 6) ) Bull = True;
+   
+   
+   if(OptTwoModels)
+     {
+      if(DirectionCheck == "buy" && 
+      ExpectedMoveLF > EntryTradeTriggerLF && ExpectedMoveHF > EntryTradeTriggerHF &&
+      ModelQualityHF > MinModQualityHF &&
+      MTConfidence > 0.97) result = True; 
+   else if(DirectionCheck == "sell" && 
+      ExpectedMoveLF < (-1*EntryTradeTriggerLF) && ExpectedMoveHF < (-1*EntryTradeTriggerHF) && 
+      ModelQualityHF > MinModQualityHF &&
+      MTConfidence > 0.97) result = True;
+     }
+   if(!OptTwoModels)
+     {
+      if(DirectionCheck == "buy" && ExpectedMoveHF > EntryTradeTriggerHF && ModelQualityHF > MinModQualityHF && MTConfidence > 0.97) result = True; 
+      else if(DirectionCheck == "sell" && ExpectedMoveHF < (-1*EntryTradeTriggerHF) && ModelQualityHF > MinModQualityHF && MTConfidence > 0.97) result = True;
+     }
+      
+   return(result);
+
+/* description: 
+   Function will use provided information to decide whether to flag buy or sell condition as true or false
+   DSS will also provide an output to the strategy test, this value is used as a filter to use this pair for trading
+ 
+*/
+  }
+//+------------------------------------------------------------------+
+//| End of GetTradeFlagCondition                                                
+//+------------------------------------------------------------------+    
+//+------------------------------------------------------------------+
+//| GetTradePrediction                                              
+//+------------------------------------------------------------------+
+double GetTradePrediction(double stopFactorm60,    //stoploss or take profit factor
+                          double AIPriceChangem60)
+  {
+// Type: Customizeable
+// Do not edit unless you know what you're doing 
+
+// This function checks robot type and return the predicted take profit or stop loss level
+// let the trader decide which strategy to use (short/medium/long) and automatically changes trading behaviour 
+
+   double result=0;
+   
+   result = stopFactorm60*MathAbs(AIPriceChangem60);  
+
+   return(result);
+
+/* Definitions: 
+ 
+*/
+  }
+//+------------------------------------------------------------------+
+//| End of GetTradePrediction                                                
+//+------------------------------------------------------------------+    
+//+------------------------------------------------------------------+
+//| Dashboard - Comment Version                                    
+//+------------------------------------------------------------------+
+/*
+ShowDashboard("Magic Number ", MagicNumber,
+              "Market Type ", MyMarketType,
+              "MyMarketTypeConf ", MyMarketTypeConf,
+              
+              "AI PriceChange Lower Period", int(AIChangeLP),
+              "AI PriceChange Higher Period", int(AIChangeHP),
+              "AItrigger L Period", AItriggerLP,
+              "AItimehold L Period M15 Bars", int(AItimeholdLP),
+              
+              "AImaxperf LP", AImaxperfLP,
+              "AIminperf LP", int(AIminperfLP),
+              "AImaxperf HP", AImaxperfHP,
+              "AIminperf HP", int(AIminperfHP)); 
+*/
+
+void ShowDashboardDSS_Bot(string Descr0, int Int1,
+                   string Descr1, int my_market_type,
+                   string Descr2, double Doubl1,
+                   string Descr3, double Doubl2,
+                   string Descr4, double Doubl3,
+                   string Descr5, double Doubl4,
+                   string Descr6, double Doubl5,
+                   string Descr7, double Doubl6,
+                   string Descr8, double Doubl7,
+                   string Descr9, double Doubl8,
+                   string Descr10, double Doubl9,
+                   string Descr11, double Doubl10) 
+  {
+// Purpose: This function creates a dashboard showing information on your EA using comments function
+// Type: Customisable 
+// Modify this function to suit your trading robot
+//----
+/*
+Conversion of Market Types
+if(res == "0" || res == "-1") {marketType = MARKET_NONE; return(marketType); }
+   if(res == "1" || res == "BUN"){marketType = MARKET_BUN;  return(marketType); }
+   if(res == "2" || res == "BUV"){marketType = MARKET_BUV;  return(marketType); }
+   if(res == "3" || res == "BEN"){marketType = MARKET_BEN;  return(marketType); }
+   if(res == "4" || res == "BEV"){marketType = MARKET_BEV;  return(marketType); }
+   if(res == "5" || res == "RAN"){marketType = MARKET_RAN;  return(marketType); }
+   if(res == "6" || res == "RAV"){marketType = MARKET_RAV;  return(marketType); }
+*/
+
+string new_line = "\n"; // "\n" or "\n\n" will move the comment to new line
+string space = ": ";    // generate space
+string underscore = "________________________________";
+string market_type;
+
+//Convert Integer value of Market Type to String value
+if(my_market_type == 0) market_type = "ERR";
+if(my_market_type == 1) market_type = "BUN";
+if(my_market_type == 2) market_type = "BUV";
+if(my_market_type == 3) market_type = "BEN";
+if(my_market_type == 4) market_type = "BEV";
+if(my_market_type == 5) market_type = "RAN";
+if(my_market_type == 6) market_type = "RAV";
+
+
+Comment(
+        new_line 
+      + Descr0 + space + IntegerToString(Int1)
+      + new_line      
+      + Descr1 + space + market_type
+      + new_line 
+      + Descr2 + space + DoubleToString(Doubl1, 2)
+      + new_line      
+      + underscore  
+      + new_line
+      + Descr3 + space + DoubleToString(Doubl2, 2)
+      + new_line        
+      + Descr4 + space + DoubleToString(Doubl3, 2)
+      + new_line
+      + Descr5 + space + DoubleToString(Doubl4, 2)
+      + new_line
+      + Descr6 + space + DoubleToString(Doubl5, 2)
+      + new_line
+      + underscore  
+      + new_line
+      + Descr7 + space + DoubleToString(Doubl6, 2)
+      + new_line
+      + underscore  
+      + new_line 
+      + Descr8 + space + DoubleToString(Doubl7, 2)
+      + new_line
+      + Descr9 + space + DoubleToString(Doubl8, 2)
+      + new_line        
+      + Descr10 + space + DoubleToString(Doubl9, 2)
+      + new_line
+      + Descr11 + space + DoubleToString(Doubl10, 2)
+      + new_line        
+      + underscore  
+      + "");
+      
+      
+  }
+
+//+------------------------------------------------------------------+
+//| End of Dashboard - Comment Version                                     
+//+------------------------------------------------------------------+   
+
+
+
+
+
+
+//+------------------------------------------------------------------+
+//| GetTradeFlagCondition                                              
+//+------------------------------------------------------------------+
+bool GetTradeFlagConditionDSS_Rule(int FastMAPeriod, //14 x M15
+                                   int SlowMAPeriod,//150 x M15
+                                   int KeltnerPeriod, //20
+                                   double KeltnerMulti, //2
+                                   int    MT, //Market Type
+                                   string DirectionCheck) //which direction to check "buy" "sell" "exitbuy" "exitsell"
+  {
+// This function checks trade flag based on hard coded logic and return either false or true
+/*
+Arbitrary Rules with default parameters:
+Enter Buy:  FastMA1 < SlowMA1 && Ask < KeltnerLower1 && CrossStoch[StMainSh1 > StSnglSh1 & StMainSh2 < StSnglSh2] && StMainSh1 < 20
+Exit Buy:   FastMA1 > SlowMA1 && Bid >  KeltnerUpper1 && StMainSh1 > 80
+
+Enter Sell:  FastMA1 > SlowMA1 && Bid > KeltnerUpper1 && CrossStoch[StMainSh1 < StSnglSh1 & StMainSh2 > StSnglSh2] && StMainSh1 > 80
+Exit Sell:   FastMA1 < SlowMA1 && Ask < KeltnerLower1  && StMainSh1 < 20
+
+*/
+   double FastMA1=iMA(Symbol(),PERIOD_M15,FastMAPeriod,0, MODE_SMA, PRICE_CLOSE,1); // Shift 1
+   double SlowMA1=iMA(Symbol(),PERIOD_M15,SlowMAPeriod,0, MODE_SMA, PRICE_CLOSE,1); // Shift 1
+
+   double KeltnerUpper1 = iCustom(Symbol(), PERIOD_M15, "Keltner_Channels", KeltnerPeriod, 0, 0, KeltnerPeriod, KeltnerMulti, True, 0, 1); // Shift 1
+   double KeltnerLower1 = iCustom(Symbol(), PERIOD_M15, "Keltner_Channels", KeltnerPeriod, 0, 0, KeltnerPeriod, KeltnerMulti, True, 2, 1); // Shift 1
+
+   double StMainSh1 = iStochastic(Symbol(), PERIOD_M15, 34, 13, 8, MODE_SMA, 0, MODE_MAIN, 1);
+   double StSnglSh1 = iStochastic(Symbol(), PERIOD_M15, 34, 13, 8, MODE_SMA, 0, MODE_SIGNAL, 1);
+   double StMainSh2 = iStochastic(Symbol(), PERIOD_M15, 34, 13, 8, MODE_SMA, 0, MODE_MAIN, 2);
+   double StSnglSh2 = iStochastic(Symbol(), PERIOD_M15, 34, 13, 8, MODE_SMA, 0, MODE_SIGNAL, 2);
+   
+   bool result=False;
+   bool Bull = False;
+   bool Bear = False;
+   
+   if( (MT == 3) || (MT == 4) || (MT == 5) || (MT == 6)) Bear = True;
+   if( (MT == 1) || (MT == 2) || (MT == 5) || (MT == 6) ) Bull = True;
+   
+   if(DirectionCheck == "buy" && FastMA1 < SlowMA1 && StMainSh1 > StSnglSh1 && StMainSh2 < StSnglSh2 && StMainSh1 < 20 && Bull) result = True; 
+   else if(DirectionCheck == "sell" && FastMA1 > SlowMA1 && StMainSh1 < StSnglSh1 && StMainSh2 > StSnglSh2 && StMainSh1 > 80 && Bear) result = True;
+   else if(DirectionCheck == "exitbuy" && FastMA1 > SlowMA1 && Bid > KeltnerUpper1 && StMainSh1 > 80) result = True;
+   else if(DirectionCheck == "exitsell" && FastMA1 < SlowMA1 && Ask < KeltnerLower1 && StMainSh1 < 20) result = True;
+      
+   return(result);
+
+/* description: 
+   Function will use provided information to decide whether to flag buy or sell condition as true or false
+    
+*/
+  }
+//+------------------------------------------------------------------+
+//| End of GetTradeFlagCondition                                                
+//+------------------------------------------------------------------+    
+
+   
+//+------------------------------------------------------------------+
+//| Dashboard - Comment Version                                    
+//+------------------------------------------------------------------+
+void ShowDashboardDSS_Rule(string Descr0, int magic,
+                   string Descr1, int my_market_type,
+                   string Descr2, int Param1,
+                   string Descr3, double Param2,
+                   string Descr4, int Param3,
+                   string Descr5, double Param4,
+                   string Descr6, int Param5,
+                   string Descr7, double Param6
+                     ) 
+  {
+// Purpose: This function creates a dashboard showing information on your EA using comments function
+// Type: Customisable 
+// Modify this function to suit your trading robot
+//----
+/*
+Conversion of Market Types
+if(res == "0" || res == "-1") {marketType = MARKET_NONE; return(marketType); }
+   if(res == "1" || res == "BUN"){marketType = MARKET_BUN;  return(marketType); }
+   if(res == "2" || res == "BUV"){marketType = MARKET_BUV;  return(marketType); }
+   if(res == "3" || res == "BEN"){marketType = MARKET_BEN;  return(marketType); }
+   if(res == "4" || res == "BEV"){marketType = MARKET_BEV;  return(marketType); }
+   if(res == "5" || res == "RAN"){marketType = MARKET_RAN;  return(marketType); }
+   if(res == "6" || res == "RAV"){marketType = MARKET_RAV;  return(marketType); }
+*/
+
+string new_line = "\n"; // "\n" or "\n\n" will move the comment to new line
+string space = ": ";    // generate space
+string underscore = "________________________________";
+string market_type;
+
+//Convert Integer value of Market Type to String value
+if(my_market_type == 0) market_type = "ERR";
+if(my_market_type == 1) market_type = "BUN";
+if(my_market_type == 2) market_type = "BUV";
+if(my_market_type == 3) market_type = "BEN";
+if(my_market_type == 4) market_type = "BEV";
+if(my_market_type == 5) market_type = "RAN";
+if(my_market_type == 6) market_type = "RAV";
+
+
+Comment(
+        new_line 
+      + Descr0 + space + IntegerToString(magic)
+      + new_line      
+      + Descr1 + space + market_type
+      + new_line 
+      + underscore  
+      + new_line
+      + new_line
+      + Descr2 + space + IntegerToString(Param1)
+      + new_line
+      + Descr3 + space + DoubleToString(Param2, 1)
+      + new_line        
+      + underscore  
+      + new_line 
+      + new_line
+      + Descr4 + space + IntegerToString(Param3)
+      + new_line
+      + Descr5 + space + DoubleToString(Param4, 1)
+      + new_line        
+      + underscore  
+      + new_line 
+      + new_line
+      + Descr6 + space + IntegerToString(Param5)
+      + new_line
+      + Descr7 + space + DoubleToString(Param6, 1)
+      + new_line        
+      + underscore  
+      + "");
+      
+      
+  }
+
+//+------------------------------------------------------------------+
+//| End of Dashboard - Comment Version                                     
+//+------------------------------------------------------------------+   
+
+//+------------------------------------------------------------------+
+//| Dashboard - Comment Version                                    
+//+------------------------------------------------------------------+
+/*
+ShowDashboard("Magic Number ", MagicNumber,
+              "Market Type ", MyMarketType,
+              "MyMarketTypeConf ", MyMarketTypeConf,
+              
+              "AI PriceChange Lower Period", int(AIChangeLP),
+              "AI PriceChange Higher Period", int(AIChangeHP),
+              "AItrigger L Period", AItriggerLP,
+              "AItimehold L Period M15 Bars", int(AItimeholdLP),
+              
+              "AImaxperf LP", AImaxperfLP,
+              "AIminperf LP", int(AIminperfLP),
+              "AImaxperf HP", AImaxperfHP,
+              "AIminperf HP", int(AIminperfHP)); 
+*/
+
+void ShowDashboardDSS_Hybrid(string Descr0, int Int1,
+                   string Descr1, int my_market_type,
+                   string Descr2, double Doubl1,
+                   string Descr3, double Doubl2,
+                   string Descr4, double Doubl3,
+                   string Descr5, double Doubl4,
+                   string Descr6, double Doubl5,
+                   string Descr7, double Doubl6,
+                   string Descr8, double Doubl7,
+                   string Descr9, double Doubl8,
+                   string Descr10, double Doubl9,
+                   string Descr11, double Doubl10) 
+  {
+// Purpose: This function creates a dashboard showing information on your EA using comments function
+// Type: Customisable 
+// Modify this function to suit your trading robot
+//----
+/*
+Conversion of Market Types
+if(res == "0" || res == "-1") {marketType = MARKET_NONE; return(marketType); }
+   if(res == "1" || res == "BUN"){marketType = MARKET_BUN;  return(marketType); }
+   if(res == "2" || res == "BUV"){marketType = MARKET_BUV;  return(marketType); }
+   if(res == "3" || res == "BEN"){marketType = MARKET_BEN;  return(marketType); }
+   if(res == "4" || res == "BEV"){marketType = MARKET_BEV;  return(marketType); }
+   if(res == "5" || res == "RAN"){marketType = MARKET_RAN;  return(marketType); }
+   if(res == "6" || res == "RAV"){marketType = MARKET_RAV;  return(marketType); }
+*/
+
+string new_line = "\n"; // "\n" or "\n\n" will move the comment to new line
+string space = ": ";    // generate space
+string underscore = "________________________________";
+string market_type;
+
+//Convert Integer value of Market Type to String value
+if(my_market_type == 0) market_type = "ERR";
+if(my_market_type == 1) market_type = "BUN";
+if(my_market_type == 2) market_type = "BUV";
+if(my_market_type == 3) market_type = "BEN";
+if(my_market_type == 4) market_type = "BEV";
+if(my_market_type == 5) market_type = "RAN";
+if(my_market_type == 6) market_type = "RAV";
+
+
+Comment(
+        new_line 
+      + Descr0 + space + IntegerToString(Int1)
+      + new_line      
+      + Descr1 + space + market_type
+      + new_line 
+      + Descr2 + space + DoubleToString(Doubl1, 2)
+      + new_line      
+      + underscore  
+      + new_line
+      + Descr3 + space + DoubleToString(Doubl2, 2)
+      + new_line        
+      + Descr4 + space + DoubleToString(Doubl3, 2)
+      + new_line
+      + Descr5 + space + DoubleToString(Doubl4, 2)
+      + new_line
+      + Descr6 + space + DoubleToString(Doubl5, 2)
+      + new_line
+      + underscore  
+      + new_line
+      + Descr7 + space + DoubleToString(Doubl6, 2)
+      + new_line
+      + underscore  
+      + new_line 
+      + Descr8 + space + DoubleToString(Doubl7, 2)
+      + new_line
+      + Descr9 + space + DoubleToString(Doubl8, 2)
+      + new_line        
+      + Descr10 + space + DoubleToString(Doubl9, 2)
+      + new_line
+      + Descr11 + space + DoubleToString(Doubl10, 2)
+      + new_line        
+      + underscore  
+      + "");
+      
+      
+  }
+
+//+------------------------------------------------------------------+
+//| End of Dashboard - Comment Version                                     
+//+------------------------------------------------------------------+   
+//+------------------------------------------------------------------+
+//| GetTradeFlagCondition                                              
+//+------------------------------------------------------------------+
+bool GetTradeFlagConditionDSS_Hybrid(double ExpectedMoveLF, //predicted change from DSS
+                           double ExpectedMoveHF,
+                           double EntryTradeTriggerLF,//absolute value to enter trade
+                           double EntryTradeTriggerHF,
+                           double ModelQualityLF, //achieved model quality
+                           double ModelQualityHF,
+                           double MinModQualityLF, //min model performance to use value of 1st quantile from StrTest- files
+                           double MinModQualityHF,
+                           int    MT, //Market Type
+                           string DirectionCheck,
+                           bool   OptTwoModels) //which direction to check "buy" "sell"
+  {
+// This function checks trade flag based on hard coded logic and return either false or true
+
+   bool result=False;
+   bool Bull = False;
+   bool Bear = False;
+   if( (MT == 3) || (MT == 4) || (MT == 5) || (MT == 6)) Bear = True;
+   if( (MT == 1) || (MT == 2) || (MT == 5) || (MT == 6)) Bull = True;
+   
+   if(OptTwoModels)
+     {
+      if(DirectionCheck == "buy" && 
+      ExpectedMoveLF > EntryTradeTriggerLF && ExpectedMoveHF > EntryTradeTriggerHF &&
+      ModelQualityLF > MinModQualityLF && ModelQualityHF > MinModQualityHF &&
+      Bull == True) result = True; 
+   else if(DirectionCheck == "sell" && 
+      ExpectedMoveLF < (-1*EntryTradeTriggerLF) && ExpectedMoveHF < (-1*EntryTradeTriggerHF) && 
+      ModelQualityLF > MinModQualityLF && ModelQualityHF > MinModQualityHF &&
+      Bear == True) result = True;
+     }
+   if(!OptTwoModels)
+     {
+      if(DirectionCheck == "buy" && ExpectedMoveHF > EntryTradeTriggerHF && ModelQualityHF > MinModQualityHF && Bear == True) result = True; 
+      else if(DirectionCheck == "sell" && ExpectedMoveHF < (-1*EntryTradeTriggerHF) && ModelQualityHF > MinModQualityHF && Bull == True) result = True;
+     }
+      
+   
+   return(result);
+
+/* description: 
+   Function will use provided information to decide whether to flag buy or sell condition as true or false
+   DSS will also provide an output to the strategy test, this value is used as a filter to use this pair for trading
+ 
+*/
+  }
+//+------------------------------------------------------------------+
+//| End of GetTradeFlagCondition                                                
+//+------------------------------------------------------------------+    
+
+
+
+//+------------------------------------------------------------------+
+//| ReadMarketFromIND                                              
+//+------------------------------------------------------------------+
+/*
+User guide:
+1. Add global bool variable to EA: e.g.:                     int     MyMarketType;
+2. Add function call inside start function to EA: e.g.: MyMarketType = ReadMarketFromCSV(Symbol());
+3. Adapt Trading Robot conditions to change trading strategy parameters eg.: see Falcon_C
+4. Add include call to this file  to EAe.g.:            #include <096_ReadMarketTypeFromCSV.mqh>
+*/
+
+
+#define MT_BUN  1       //Market with bullish character
+#define MT_BEN  3       //Market with bearish character
+#define MT_RAN  5       //Market with Ranging character
+
+int ReadMarketFromIND(string symbol)
+{
+/*
+- Function uses the manual rule
+
+Identify 3 Market Types: BUN, RAN, BEV
+  Use 2 indicators: MA and Bears as follows:
+  BUN: D1 MA950 < D1 MA10 && D1 Bears24 > 0 
+  BEV: D1 MA950 > D1 MA10 && D1 Bears24 < 0
+  RAN: D1 MA950 < D1 MA10 && D1 Bears24 > 0 || D1 MA950 > D1 MA10 && D1 Bears24 > 0
+ 
+*/
+   //define internal variables needed
+   int marketType = -1;         //Variable to store and return the market type
+   string res = "0";            //Variable to return result of the function
+   
+
+   //define indicator values
+   double D1MA950 = iMA(symbol, PERIOD_D1, 950, 0, 0, 0, 1);
+   double  D1MA10 = iMA(symbol, PERIOD_D1, 10, 0, 0, 0, 1);
+   double D1BE24 = iBearsPower(symbol, PERIOD_D1, 24, 0, 1);
+   
+   //Assign market variable based on result
+   //if(res == "0" || res == "-1") {marketType = MARKET_NONE; return(marketType); }
+   if(((D1MA950 < D1MA10) && (D1BE24 > 0))){marketType = MT_BUN;  return(marketType); }
+   //if(res == "2" || res == "BUV"){marketType = MARKET_BUV;  return(marketType); }
+   if(((D1MA950 > D1MA10) && (D1BE24 < 0))){marketType = MT_BEN;  return(marketType); }
+   //if(res == "4" || res == "BEV"){marketType = MARKET_BEV;  return(marketType); }
+   if((((D1MA950 < D1MA10) && (D1BE24 < 0)) || ((D1MA950 > D1MA10) && (D1BE24 > 0)))){marketType = MT_RAN;  return(marketType); }
+   //if(res == "6" || res == "RAV"){marketType = MARKET_RAV;  return(marketType); }
+   
+   return(marketType); //in anomalous case function will return error '-1'
+ 
+} 
+//+------------------------------------------------------------------+
+//| End of ReadMarketFromIND                                                
+//+------------------------------------------------------------------+ 
