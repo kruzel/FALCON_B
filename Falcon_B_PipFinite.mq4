@@ -50,6 +50,12 @@ extern bool    UseRetracementEntry              = true;    // Enable retracement
 extern double  MinRetracementPips               = 5.0;     // Minimum retracement distance in pips
 extern double  RetracementEndThreshold          = 3.0;     // Pips threshold to confirm retracement has ended
 
+extern string  Header2d="----------Support/Resistance Breakout Settings-----------";
+extern bool    UseSRBreakoutEntry               = true;    // Enable support/resistance breakout entry signals
+extern int     SRLookbackPeriod                 = 50;     // Number of bars to look back for S/R levels
+extern double  SRBreakoutBuffer                 = 2.0;     // Buffer in pips to confirm breakout
+extern int     MaxSRLevels                      = 10;     // Maximum number of S/R levels to track
+
 extern string  Header3="----------Position Sizing Settings-----------";
 extern string  Lot_explanation                  = "If IsSizingOn = true, Lots variable will be ignored";
 extern double  Lots                             = 0.01;
@@ -150,6 +156,18 @@ double RetracementStart = 0;        // Price where retracement started
 double RetracementExtreme = 0;      // Most extreme price during retracement
 int RetracementDirection = 0;       // 1 = retracing down from high, -1 = retracing up from low
 
+// Support/Resistance Variables
+double SRLevels[];                  // Array to store S/R levels
+int SRTypes[];                      // Array to store S/R types: 1=resistance, -1=support
+int SRStrength[];                   // Array to store S/R strength (number of touches)
+int CurrentSRCount = 0;             // Current number of S/R levels tracked
+
+// Crossing state arrays for multiple line detection (for enhanced Crossed function)
+int CrossCurrentDirection[];        // Current direction for each line being tracked
+int CrossLastDirection[];          // Last direction for each line being tracked  
+bool CrossFirstTime[];             // First time flag for each line being tracked
+int MaxCrossLines = 20;            // Maximum number of lines that can be tracked simultaneously
+
 int OrderNumber;
 double HiddenSLList[][2]; // First dimension is for position ticket numbers, second is for the SL Levels
 double HiddenTPList[][2]; // First dimension is for position ticket numbers, second is for the TP Levels
@@ -232,6 +250,27 @@ int init()
    if(UseVolTrailingStops) ArrayResize(VolTrailingList,MaxPositionsAllowed,0);
    if(UseHiddenVolTrailing) ArrayResize(HiddenVolTrailingList,MaxPositionsAllowed,0);
 
+//----------Support/Resistance and Crossing Arrays Initialization-----------
+   if(UseSRBreakoutEntry) 
+     {
+      ArrayResize(SRLevels, MaxSRLevels, 0);
+      ArrayResize(SRTypes, MaxSRLevels, 0);
+      ArrayResize(SRStrength, MaxSRLevels, 0);
+     }
+   
+   // Initialize crossing state arrays for multiple line tracking
+   ArrayResize(CrossCurrentDirection, MaxCrossLines, 0);
+   ArrayResize(CrossLastDirection, MaxCrossLines, 0);
+   ArrayResize(CrossFirstTime, MaxCrossLines, 0);
+   
+   // Initialize all crossing states
+   for(int i = 0; i < MaxCrossLines; i++)
+     {
+      CrossCurrentDirection[i] = 0;
+      CrossLastDirection[i] = 0;
+      CrossFirstTime[i] = true;
+     }
+
    start();
    return(0);
   }
@@ -301,7 +340,7 @@ int start()
       if (pipFiniteLine == EMPTY_VALUE)
          CrossTriggered = 0; // Reset CrossTriggered if no signal is available
       else
-         CrossTriggered = Crossed(Close[2], Close[1], pipFiniteLine); // Returns 0=no cross, 1=buy signal, 2=sell signal
+         CrossTriggered = CrossedWithId(Close[2], Close[1], pipFiniteLine, 0); // Use ID 0 for PipFinite line
       
       lastSignalBarTime = currentBarTime; // Update last signal calculation time
    }
@@ -480,6 +519,10 @@ Content:
 35) GetErrorDescription
 36) DisplayZigZagInfo
 37) DisplayRetracementInfo
+38) CrossedWithId
+39) DetectSupportResistanceLevels
+40) DetectSRBreakoutSignal
+41) DisplaySRInfo
 
 */
 
@@ -688,6 +731,20 @@ int EntrySignal(int CrossOccurred)
      {
       entryOutput = 2;
       if(VerboseJournaling) Print("Entry Signal - SELL after retracement completion");
+     }
+
+   // Check for support/resistance breakout signals
+   int srBreakoutSignal = DetectSRBreakoutSignal();
+   
+   if(srBreakoutSignal == 1) // Buy signal from resistance breakout
+     {
+      entryOutput = 1;
+      if(VerboseJournaling) Print("Entry Signal - BUY from resistance breakout");
+     }
+   else if(srBreakoutSignal == 2) // Sell signal from support breakout
+     {
+      entryOutput = 2;
+      if(VerboseJournaling) Print("Entry Signal - SELL from support breakout");
      }
 
    return(entryOutput);
@@ -1893,7 +1950,7 @@ void SetAndTriggerHiddenTrailing(bool Journaling,double TrailingStopDist,double 
             if(posTicketNumber==HiddenTrailingList[x,0]) 
               { // If condition holds, it means the position have a hidden trailing stop level attached to it
 
-               doesHiddenTrailingRecordExist=True;
+               doesHiddenTrailingRecordExist = True; 
                bool Closing=false;
                RefreshRates();
 
@@ -2655,4 +2712,235 @@ void DisplayRetracementInfo()
   }
 //+------------------------------------------------------------------+
 //| End of DISPLAY RETRACEMENT INFO                                 
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| ENHANCED CROSS WITH ID                                          |
+//+------------------------------------------------------------------+
+int CrossedWithId(double close2, double close1, double line, int crossId)
+  {
+// Type: Fixed Template 
+// Enhanced crossing function that can handle multiple lines simultaneously using arrays
+
+// This function determines if a cross happened between 2 lines/data set for a specific ID
+
+/* 
+If Output is 0: No cross happened
+If Output is 1: Price crossed line from Bottom (Bullish)
+If Output is 2: Price crossed line from Top (Bearish)
+*/
+
+   if(crossId < 0 || crossId >= MaxCrossLines) return(0); // Invalid ID
+   
+   // Check crossing using Close[2] and Close[1] vs the provided line
+   if(close2 > line && close1 < line)
+      CrossCurrentDirection[crossId] = 2;  // Bearish cross: Price crossed below line
+   else if(close2 < line && close1 > line)
+      CrossCurrentDirection[crossId] = 1;  // Bullish cross: Price crossed above line
+   else
+      CrossCurrentDirection[crossId] = 0;  // No cross
+
+   if(CrossFirstTime[crossId] == true) // Need to check if this is the first time the function is run for this ID
+     {
+      CrossFirstTime[crossId] = false; // Change variable to false
+      CrossLastDirection[crossId] = CrossCurrentDirection[crossId]; // Set new direction
+      return(0);
+     }
+
+   if(CrossCurrentDirection[crossId] != 0 && CrossCurrentDirection[crossId] != CrossLastDirection[crossId] && CrossFirstTime[crossId] == false) 
+     {
+      CrossLastDirection[crossId] = CrossCurrentDirection[crossId]; // Set new direction
+      return(CrossCurrentDirection[crossId]); // 1 for bullish, 2 for bearish
+     }
+   else
+     {
+      return(0);  // No direction change
+     }
+  }
+//+------------------------------------------------------------------+
+//| End of ENHANCED CROSS WITH ID                                   
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| DETECT SUPPORT RESISTANCE LEVELS                                |
+//+------------------------------------------------------------------+
+void DetectSupportResistanceLevels()
+  {
+// This function detects support and resistance levels using ZigZag highs and lows
+
+   if(!UseSRBreakoutEntry) return; // Skip if S/R breakout trading disabled
+   
+   CurrentSRCount = 0; // Reset current count
+   
+   // Clear existing S/R arrays
+   ArrayInitialize(SRLevels, 0);
+   ArrayInitialize(SRTypes, 0);
+   ArrayInitialize(SRStrength, 0);
+   
+   // Look back through ZigZag points to identify S/R levels
+   for(int i = 1; i <= SRLookbackPeriod && CurrentSRCount < MaxSRLevels; i++)
+     {
+      // Get ZigZag highs and lows at different shifts
+      double zigzagHigh = iCustom(NULL, 0, "ZigZag", ZigZag_Depth, ZigZag_Deviation, ZigZag_Backstep, 1, i);
+      double zigzagLow = iCustom(NULL, 0, "ZigZag", ZigZag_Depth, ZigZag_Deviation, ZigZag_Backstep, 2, i);
+      
+      // Check if we found a ZigZag high (resistance level)
+      if(zigzagHigh != EMPTY_VALUE && zigzagHigh > 0)
+        {
+         bool levelExists = false;
+         
+         // Check if this level already exists (within threshold)
+         for(int j = 0; j < CurrentSRCount; j++)
+           {
+            if(MathAbs(SRLevels[j] - zigzagHigh) <= SupportResistanceThreshold * Point * P)
+              {
+               levelExists = true;
+               SRStrength[j]++; // Increase strength
+               break;
+              }
+           }
+         
+         // Add new resistance level if it doesn't exist
+         if(!levelExists && CurrentSRCount < MaxSRLevels)
+           {
+            SRLevels[CurrentSRCount] = zigzagHigh;
+            SRTypes[CurrentSRCount] = 1; // Resistance
+            SRStrength[CurrentSRCount] = 1;
+            CurrentSRCount++;
+           }
+        }
+      
+      // Check if we found a ZigZag low (support level)
+      if(zigzagLow != EMPTY_VALUE && zigzagLow > 0)
+        {
+         bool levelExists = false;
+         
+         // Check if this level already exists (within threshold)
+         for(int j = 0; j < CurrentSRCount; j++)
+           {
+            if(MathAbs(SRLevels[j] - zigzagLow) <= SupportResistanceThreshold * Point * P)
+              {
+               levelExists = true;
+               SRStrength[j]++; // Increase strength
+               break;
+              }
+           }
+         
+         // Add new support level if it doesn't exist
+         if(!levelExists && CurrentSRCount < MaxSRLevels)
+           {
+            SRLevels[CurrentSRCount] = zigzagLow;
+            SRTypes[CurrentSRCount] = -1; // Support
+            SRStrength[CurrentSRCount] = 1;
+            CurrentSRCount++;
+           }
+        }
+     }
+   
+  //  if(VerboseJournaling && CurrentSRCount > 0)
+  //    Print("Detected " + (string)CurrentSRCount + " Support/Resistance levels");
+  }
+//+------------------------------------------------------------------+
+//| End of DETECT SUPPORT RESISTANCE LEVELS                         
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| DETECT S/R BREAKOUT SIGNAL                                      |
+//+------------------------------------------------------------------+
+int DetectSRBreakoutSignal()
+  {
+// This function detects support and resistance breakout signals
+
+   if(!UseSRBreakoutEntry) return(0); // Skip if S/R breakout trading disabled
+   
+   int breakoutSignal = 0;
+   
+   // Update S/R levels first
+   DetectSupportResistanceLevels();
+   
+   if(CurrentSRCount == 0) return(0); // No S/R levels detected
+   
+   // Check each S/R level for breakouts
+   for(int i = 0; i < CurrentSRCount; i++)
+     {
+      double srLevel = SRLevels[i];
+      int srType = SRTypes[i];
+      double breakoutThreshold = SRBreakoutBuffer * Point * P;
+      
+      // Use unique cross ID for each S/R level (starting from ID 10 to avoid conflicts)
+      int crossId = 10 + i;
+      
+      // Check for breakout using the enhanced crossing function
+      int crossResult = CrossedWithId(Close[2], Close[1], srLevel, crossId);
+      
+      if(crossResult != 0)
+        {
+         if(srType == 1 && crossResult == 1) // Resistance breakout (upward)
+           {
+            // Confirm breakout with buffer
+            if(Close[1] > srLevel + breakoutThreshold)
+              {
+               breakoutSignal = 1; // Buy signal
+               if(VerboseJournaling)
+                  Print("Resistance Breakout detected at " + DoubleToString(srLevel, Digits) + 
+                        " - BUY signal generated");
+               break; // Exit loop after first valid signal
+              }
+           }
+         else if(srType == -1 && crossResult == 2) // Support breakout (downward) 
+           {
+            // Confirm breakout with buffer
+            if(Close[1] < srLevel - breakoutThreshold)
+              {
+               breakoutSignal = 2; // Sell signal
+               if(VerboseJournaling)
+                  Print("Support Breakout detected at " + DoubleToString(srLevel, Digits) + 
+                        " - SELL signal generated");
+               break; // Exit loop after first valid signal
+              }
+           }
+        }
+     }
+   
+   return(breakoutSignal);
+  }
+//+------------------------------------------------------------------+
+//| End of DETECT S/R BREAKOUT SIGNAL                               
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| DISPLAY S/R INFO                                                |
+//+------------------------------------------------------------------+
+void DisplaySRInfo()
+  {
+// This function displays current support/resistance analysis information
+
+   if(!UseSRBreakoutEntry) return; // Skip if S/R breakout trading disabled
+   
+   string info = "\n=== Support/Resistance Analysis ===\n";
+   
+   // Show S/R settings
+   info += "S/R Breakout Trading: " + (UseSRBreakoutEntry ? "ENABLED" : "DISABLED") + "\n";
+   info += "Lookback Period: " + (string)SRLookbackPeriod + " bars\n";
+   info += "Breakout Buffer: " + DoubleToString(SRBreakoutBuffer, 1) + " pips\n";
+   info += "Max S/R Levels: " + (string)MaxSRLevels + "\n";
+   info += "S/R Threshold: " + DoubleToString(SupportResistanceThreshold, 1) + " pips\n";
+   
+   // Show detected S/R levels
+   info += "Detected Levels: " + (string)CurrentSRCount + "\n";
+   
+   for(int i = 0; i < CurrentSRCount; i++)
+     {
+      string typeStr = (SRTypes[i] == 1) ? "RESISTANCE" : "SUPPORT";
+      info += "Level " + (string)(i+1) + ": " + DoubleToString(SRLevels[i], Digits) + 
+              " (" + typeStr + ", Strength: " + (string)SRStrength[i] + ")\n";
+     }
+   
+   if(CurrentSRCount == 0)
+     info += "No S/R levels detected in current lookback period\n";
+   
+   Print("" + info);
+  }
+//+------------------------------------------------------------------+
+//| End of DISPLAY S/R INFO                                         
 //+------------------------------------------------------------------+
