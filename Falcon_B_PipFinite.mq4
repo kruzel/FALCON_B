@@ -33,9 +33,9 @@ extern bool    IsECNbroker                      = false; // Is your broker an EC
 extern bool    OnJournaling                     = true; // Add EA updates in the Journal Tab
 
 extern string  Header2="----------Trading Rules Variables-----------";
-// extern int     PipFinite_Period                 = 3;       // PipFinite Trend PRO Period
-// extern double  PipFinite_TargetFactor           = 2.0;     // PipFinite Trend PRO Target Factor
-// extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PRO Maximum History Bars
+extern int     PipFinite_Period                 = 3;       // PipFinite Trend PRO Period
+extern double  PipFinite_TargetFactor           = 2.0;     // PipFinite Trend PRO Target Factor
+extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PRO Maximum History Bars
 extern int     PipFinite_UptrendBuffer          = 10;       // PipFinite Uptrend Buffer Number
 extern int     PipFinite_DowntrendBuffer        = 11;       // PipFinite Downtrend Buffer Number
 
@@ -126,7 +126,7 @@ double Price1;
 // TDL 3: Declaring Variables (and the extern variables above)
 
 double PipFiniteUptrendSignal1, PipFiniteDowntrendSignal1;
-int CrossTriggered2, CrossTriggered3;
+int CrossTriggered;
 
 int OrderNumber;
 double HiddenSLList[][2]; // First dimension is for position ticket numbers, second is for the SL Levels
@@ -186,6 +186,7 @@ int init()
    if(UseVolTrailingStops) ArrayResize(VolTrailingList,MaxPositionsAllowed,0);
    if(UseHiddenVolTrailing) ArrayResize(HiddenVolTrailingList,MaxPositionsAllowed,0);
 
+   start();
    return(0);
   }
 //+------------------------------------------------------------------+
@@ -196,31 +197,6 @@ int init()
 //+------------------------------------------------------------------+
 int deinit()
   {
-//----
-   // Clear any comments and reset indicator variables
-   Comment("");
-   
-   // Reset PipFinite indicator variables to prevent multiple instances
-   PipFiniteUptrendSignal1 = 0;
-   PipFiniteDowntrendSignal1 = 0;
-   CrossTriggered2 = 0;
-   CrossTriggered3 = 0;
-   
-   // Remove all indicators from chart
-   int totalIndicators = ChartIndicatorsTotal(0, 0);
-   for(int i = totalIndicators - 1; i >= 0; i--)
-   {
-      string indicatorName = ChartIndicatorName(0, 0, i);
-      if(StringFind(indicatorName, "PipFinite") >= 0)
-      {
-         ChartIndicatorDelete(0, 0, indicatorName);
-      }
-   }
-   
-   // Force chart refresh to clear all indicators
-   ChartRedraw();
-   
-//----
    return(0);
   }
 //+------------------------------------------------------------------+
@@ -251,20 +227,32 @@ int start()
 
    // TDL 1: Assigning Values to Variables
    
-   // Call iCustom on every tick to get fresh indicator values
-   PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
-   PipFiniteDowntrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_DowntrendBuffer, 1); // Buffer for Downtrend, Shift 1
+   // Calculate entry/exit signals only at the beginning of a new bar
+   static datetime lastSignalBarTime = 0;
+   datetime currentBarTime = Time[1]; // Use previous completed bar
    
-
-   if (PipFiniteUptrendSignal1 == EMPTY_VALUE)
-      CrossTriggered2 = 0; // Reset CrossTriggered2 if the signal is not available
-   else
-      if(Crossed2(Ask,PipFiniteUptrendSignal1) == 1) {CrossTriggered2 = 1;} else {CrossTriggered2 = 0;}; // Use Crossed2 function with Ask vs PipFinite Uptrend signal
-   
-   if (PipFiniteDowntrendSignal1 == EMPTY_VALUE)
-      CrossTriggered3 = 0; // Reset CrossTriggered3 if the signal is not available
-   else
-      if(Crossed3(Bid,PipFiniteDowntrendSignal1) == 2) {CrossTriggered3 = 2;} else {CrossTriggered3 = 0;}; // Use Crossed3 function with Bid vs PipFinite Downtrend signal
+   // Only calculate signals once per new bar
+   if(currentBarTime != lastSignalBarTime)
+   {
+      // Get PipFinite indicator values with proper parameters
+      PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
+      PipFiniteDowntrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_DowntrendBuffer, 1); // Buffer for Downtrend, Shift 1
+      
+      // Calculate entry signals using Close[2] and Close[1] for crossing logic
+      // Use main trend line - choose uptrend or downtrend based on which has valid data
+      double pipFiniteLine = EMPTY_VALUE;
+      if (PipFiniteUptrendSignal1 != EMPTY_VALUE)
+         pipFiniteLine = PipFiniteUptrendSignal1;
+      else if (PipFiniteDowntrendSignal1 != EMPTY_VALUE)
+         pipFiniteLine = PipFiniteDowntrendSignal1;
+      
+      if (pipFiniteLine == EMPTY_VALUE)
+         CrossTriggered = 0; // Reset CrossTriggered if no signal is available
+      else
+         CrossTriggered = Crossed(Close[2], Close[1], pipFiniteLine); // Returns 0=no cross, 1=buy signal, 2=sell signal
+      
+      lastSignalBarTime = currentBarTime; // Update last signal calculation time
+   }
 
 //----------TP, SL, Breakeven and Trailing Stops Variables-----------
 
@@ -311,24 +299,24 @@ int start()
 
    // TDL 2: Setting up Exit rules. Modify the ExitSignal() function to suit your needs.
 
-   if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(CrossTriggered3)==2)
+   if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(CrossTriggered)==2)
      { // Close Long Positions
       CloseOrderPosition(OP_BUY, OnJournaling, MagicNumber, Slippage, P, RetryInterval); 
 
      }
-   if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ExitSignal(CrossTriggered2)==1)
+   if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ExitSignal(CrossTriggered)==1)
      { // Close Short Positions
       CloseOrderPosition(OP_SELL, OnJournaling, MagicNumber, Slippage, P, RetryInterval);
      }
 
 //----------Entry Rules (Market and Pending) -----------
 
-   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(CrossTriggered2))==False) 
+   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(CrossTriggered))==False) 
       if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
          if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==False)
            {
-            if(TradeAllowed && EntrySignal(CrossTriggered2)==1)
-              { // Open Long Positions based on PipFinite Uptrend signal
+            if(TradeAllowed && EntrySignal(CrossTriggered)==1)
+              { // Open Long Positions based on PipFinite Buy signal
                OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
    
                // Set Stop Loss value for Hidden SL
@@ -345,8 +333,8 @@ int start()
              
               }
    
-            if(TradeAllowed && EntrySignal(CrossTriggered3)==2)
-              { // Open Short Positions based on PipFinite Downtrend signal
+            if(TradeAllowed && EntrySignal(CrossTriggered)==2)
+              { // Open Short Positions based on PipFinite Sell signal
                OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
    
                // Set Stop Loss value for Hidden SL
@@ -955,7 +943,7 @@ double VolBasedTakeProfit(bool isVolatilitySwitchOn,double fixedTP,double VolATR
 //| End of Volatility-Based Take Profit                 
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
-// Cross1                                                             
+// Cross                                                            
 //+------------------------------------------------------------------+
 
 // Type: Fixed Template 
@@ -971,68 +959,20 @@ If Output is 2: Line 1 crossed Line 2 from top
 
 */
 
-int Crossed1(double line1,double line2)
+int Crossed(double close2, double close1, double pipFiniteLine)
   {
 
    static int CurrentDirection1=0;
    static int LastDirection1=0;
    static bool FirstTime1=true;
 
-//----
-   if(line1>line2)
-      CurrentDirection1=1;  // line1 above line2
-   if(line1<line2)
-      CurrentDirection1=2;  // line1 below line2
-//----
-   if(FirstTime1==true) // Need to check if this is the first time the function is run
-     {
-      FirstTime1=false; // Change variable to false
-      LastDirection1=CurrentDirection1; // Set new direction
-      return (0);
-     }
-
-   if(CurrentDirection1!=LastDirection1 && FirstTime1==false) // If not the first time and there is a direction change
-     {
-      LastDirection1=CurrentDirection1; // Set new direction
-      return(CurrentDirection1); // 1 for up, 2 for down
-     }
+//---- Check crossing using Close[2] and Close[1] vs PipFinite line
+   if(close2>pipFiniteLine && close1<pipFiniteLine)
+      CurrentDirection1=2;  // Downtrend cross: Close crossed below PipFinite line
+   else if(close2<pipFiniteLine && close1>pipFiniteLine)
+      CurrentDirection1=1;  // Uptrend cross: Close crossed above PipFinite line
    else
-     {
-      return(0);  // No direction change
-     }
-  }
-//+------------------------------------------------------------------+
-// End of Cross                                                      
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-// Cross2                                                             
-//+------------------------------------------------------------------+
-
-// Type: Fixed Template 
-// Do not edit unless you know what you're doing
-
-// This function determines if a cross happened between 2 lines/data set
-
-/* 
-
-If Output is 0: No cross happened
-If Output is 1: Line 1 crossed Line 2 from Bottom
-If Output is 2: Line 1 crossed Line 2 from top 
-
-*/
-
-int Crossed2(double line1,double line2)
-  {
-
-   static int CurrentDirection1=0;
-   static int LastDirection1=0;
-   static bool FirstTime1=true;
-
-//----
-   if(line1>line2)
-      CurrentDirection1=1;  // line1 above line2
-   if(line1<line2)
-      CurrentDirection1=2;  // line1 below line2
+      CurrentDirection1=0;  // No cross
 //----
    if(FirstTime1==true) // Need to check if this is the first time the function is run
      {
@@ -1041,57 +981,7 @@ int Crossed2(double line1,double line2)
       return (0);
      }
 
-   if(CurrentDirection1!=LastDirection1 && FirstTime1==false) // If not the first time and there is a direction change
-     {
-      LastDirection1=CurrentDirection1; // Set new direction
-      return(CurrentDirection1); // 1 for up, 2 for down
-     }
-   else
-     {
-      return(0);  // No direction change
-     }
-  }
-//+------------------------------------------------------------------+
-// End of Cross                                                      
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-// Cross3                                                          
-//+------------------------------------------------------------------+
-
-// Type: Fixed Template 
-// Do not edit unless you know what you're doing
-
-// This function determines if a cross happened between 2 lines/data set
-
-/* 
-
-If Output is 0: No cross happened
-If Output is 1: Line 1 crossed Line 2 from Bottom
-If Output is 2: Line 1 crossed Line 2 from top 
-
-*/
-
-int Crossed3(double line1,double line2)
-  {
-
-   static int CurrentDirection1=0;
-   static int LastDirection1=0;
-   static bool FirstTime1=true;
-
-//----
-   if(line1>line2)
-      CurrentDirection1=1;  // line1 above line2
-   if(line1<line2)
-      CurrentDirection1=2;  // line1 below line2
-//----
-   if(FirstTime1==true) // Need to check if this is the first time the function is run
-     {
-      FirstTime1=false; // Change variable to false
-      LastDirection1=CurrentDirection1; // Set new direction
-      return (0);
-     }
-
-   if(CurrentDirection1!=LastDirection1 && FirstTime1==false) // If not the first time and there is a direction change
+   if(CurrentDirection1!=0 && CurrentDirection1!=LastDirection1 && FirstTime1==false) // If not the first time and there is a direction change
      {
       LastDirection1=CurrentDirection1; // Set new direction
       return(CurrentDirection1); // 1 for up, 2 for down
