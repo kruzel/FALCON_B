@@ -20,3 +20,4 @@ TEST/*-Re-Train.csv
 compilemql4.log
 **/*.log
 **/*.ex4
+*.log
