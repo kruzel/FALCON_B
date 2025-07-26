@@ -8,7 +8,7 @@
 #include <Falcon_B/03_ReadCommandFromCSV.mqh>
 #include <Falcon_B/08_TerminalNumber.mqh>
 #include <Falcon_B/PriceActionStates.mqh>
-#include <Falcon_B/ZigZagStates.mqh>
+#include <Falcon_B/SupportResistance.mqh>
 #include <Falcon_B/10_isNewBar.mqh>
 
 #property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
@@ -109,7 +109,7 @@ extern int     ATRTimeframe                     = 60; // In minutes
 extern int     ATRPeriod                        = 14;
 
 extern string  Header15="----------Trading Rules Variables-----------";
-extern bool    UsePipFiniteEntry                = true;
+extern bool    UsePipFiniteEntry                = false;
 extern int     PipFinite_Period                 = 3;       // PipFinite Trend PRO Period
 extern double  PipFinite_TargetFactor           = 2.0;     // PipFinite Trend PRO Target Factor
 extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PRO Maximum History Bars
@@ -135,6 +135,8 @@ double myATR;
 
 double PipFiniteUptrendSignal1, PipFiniteDowntrendSignal1;
 int EntrySignal;
+
+CSupportResistance* sr;
 
 int CrossTriggered;
 int SRTriggered;
@@ -198,7 +200,7 @@ int init()
    if(UseHiddenVolTrailing) ArrayResize(HiddenVolTrailingList,MaxPositionsAllowed,0);
 
    PaInit();
-
+   sr = new CSupportResistance(10.0, 13, 5, 3); // margin=10 points, ZigZag params
    
    start();
    return(0);
@@ -213,7 +215,7 @@ int deinit()
   {
 //----
     PaDeinit(); // Deinitialize ZigZag indicator
-    ZZInit(); // Reinitialize ZigZag indicator to clear any state
+    delete sr;
 //----
    return(0);
   }
@@ -246,7 +248,7 @@ int start()
 //----------Entry & Exit Variables-----------
 
    PaResults paState = PaProcessBars(1);
-   ZZProcessBar();
+   sr.SRUpdate(0); // Update for current bar
       
    if(UsePipFiniteEntry)
     {
@@ -282,7 +284,7 @@ int start()
 
     if(UseSRthreshold)
     {
-      // SRCheckResult NearSRtriggered =  CheckSupportResistance(Close[1], SRthreshold * (P*Point)); // Check if close price is near support/resistance
+        // SR_STATUS status = sr.CheckNearSR(Close[1], Time[1], SR_UP_TREND);
       // if(NearSRtriggered == ABOVE_HIGHER_SR)
       //   {
       //     if(OnJournaling) Print("Above Higher SR - ", Close[1]);
