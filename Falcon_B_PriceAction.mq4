@@ -30,10 +30,10 @@ Falcon B:
 extern string  Header1="----------EA General Settings-----------";
 extern int     MagicNumber                      = 8118201;
 extern int     TerminalType                     = 1;         //0 mean slave, 1 mean master
-extern bool    R_Management                     = true;      //R_Management true will enable Decision Support Centre (using R)
+extern bool    R_Management                     = False;      //R_Management true will enable Decision Support Centre (using R)
 extern int     Slippage                         = 3; // In Pips
-extern bool    IsECNbroker                      = false; // Is your broker an ECN
-extern bool    OnJournaling                     = true; // Add EA updates in the Journal Tab
+extern bool    IsECNbroker                      = False; // Is your broker an ECN
+extern bool    OnJournaling                     = True; // Add EA updates in the Journal Tab
 
 extern string  Header3="----------Position Sizing Settings-----------";
 extern string  Lot_explanation                  = "If IsSizingOn = true, Lots variable will be ignored";
@@ -43,8 +43,9 @@ extern double  Risk                             = 1; // Risk per trade (in perce
 extern int     MaxPositionsAllowed              = 1;
 
 extern string  Header4="----------TP & SL Settings-----------";
-extern bool    SlTpbyLastBar                      = True; // Use the last bar's high/low as Stop Loss
+extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
+extern double  MinStopLossATR                     = 5; // Minimum Stop Loss in Pips or ATR
 
 extern bool    UseFixedStopLoss                 = False; // If this is false and IsSizingOn = True, sizing algo will not be able to calculate correct lot size. 
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
@@ -108,16 +109,20 @@ extern double  VolatilityMultiplier             = 3; // In units of ATR
 extern int     ATRTimeframe                     = 60; // In minutes
 extern int     ATRPeriod                        = 14;
 
-extern string  Header15="----------Trading Rules Variables-----------";
-extern bool    UsePipFiniteEntry                = false;
+extern string  Header15="----------PipFinite Variables-----------";
+extern bool    UsePipFiniteEntry                = True;
 extern int     PipFinite_Period                 = 3;       // PipFinite Trend PRO Period
 extern double  PipFinite_TargetFactor           = 2.0;     // PipFinite Trend PRO Target Factor
 extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PRO Maximum History Bars
 extern int     PipFinite_UptrendBuffer          = 10;       // PipFinite Uptrend Buffer Number
 extern int     PipFinite_DowntrendBuffer        = 11;       // PipFinite Downtrend Buffer Number
 
-extern bool    UseSRthreshold                   = true;     // Use Support/Resistance Threshold
-extern int     SRthreshold                      = 10;       // Support/Resistance threshold in Pips
+extern string  Header16="----------Support Resistance Variables-----------";
+extern bool    UseSupportResistance             = False;     // Use Support/Resistance Threshold
+extern int     SRmarginPips                     = 10;       // Support/Resistance threshold in Pips
+extern int     zigzagDepth                      = 12;       // ZigZag Depth
+extern int     zigzagDeviation                  = 5;        // ZigZag Deviation
+extern int     zigzagBackstep                   = 3;        // ZigZag Backstep
 
 string  InternalHeader1="----------Errors Handling Settings-----------";
 int     RetryInterval                           = 100; // Pause Time before next retry (in milliseconds)
@@ -200,8 +205,8 @@ int init()
    if(UseHiddenVolTrailing) ArrayResize(HiddenVolTrailingList,MaxPositionsAllowed,0);
 
    PaInit();
-   sr = new CSupportResistance(10.0, 13, 5, 3); // margin=10 points, ZigZag params
-   
+   sr = new CSupportResistance(SRmarginPips, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
+
    start();
    return(0);
   }
@@ -282,7 +287,7 @@ int start()
           // else if(OnJournaling) Print("Entry Signal - No crossing detected, Close[2]=", Close[2], ", Close[1]=", Close[1], ", pipFiniteLine=", pipFiniteLine);
     }  
 
-    if(UseSRthreshold)
+    if(UseSupportResistance)
     {
         // SR_STATUS status = sr.CheckNearSR(Close[1], Time[1], SR_UP_TREND);
       // if(NearSRtriggered == ABOVE_HIGHER_SR)
@@ -313,16 +318,30 @@ int start()
     {
       if(CrossTriggered==1) // Buy
         {
-         Stop=(Ask - MathMin(Close[1],Open[1]))/(P*Point); // Stop Loss in Pips
-         Take=Stop*TpSlRatio;
-        } else if(CrossTriggered==2) { // Sell
-         Stop=(MathMax(Close[1],Open[1])-Bid)/(P*Point); // Stop Loss in Pips
+          Stop=(Ask - MathMin(Close[1],Open[1]))/(P*Point); // Stop Loss in Pips
+          if(Stop<MinStopLossATR) // If the last bar is a Doji
+          {
+            Stop=myATR/(P*Point); 
+            Print("Doji detected, using ATR for Stop Loss: ", Stop);
+          }
+            
+          Take=Stop*TpSlRatio;
+        } 
+        else if(CrossTriggered==2) 
+        { // Sell
+          Stop=(MathMax(Close[1],Open[1])-Bid)/(P*Point); // Stop Loss in Pips
+          if(Stop<MinStopLossATR) // If the last bar is a Doji
+          {
+            Stop=myATR/(P*Point); 
+            Print("Doji detected, using ATR for Stop Loss: ", Stop);
+          }
+          
          Take=Stop*TpSlRatio;
         }
     } 
     else 
     { // Use Fixed Stop Loss
-      if(UseFixedStopLoss==False) 
+      if(UseFixedStopLoss==True) 
       {
         if(CrossTriggered==1) // Buy
           Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
@@ -334,7 +353,7 @@ int start()
         Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,P);
       }
 
-      if(UseFixedTakeProfit==False) 
+      if(UseFixedTakeProfit==True) 
       {
         if(CrossTriggered==1) // Buy
           Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
@@ -2193,7 +2212,7 @@ void VisualizeSignalOverlay(int i, int signal)
       default:  return; //              ObjectDelete("peak_" + IntegerToString(i)); return;
    }
    string name = "signal_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + txt;
-   Print("VisualizeSignalOverlay: i=", i, " name=", name, ", y=", y);
+  //  Print("VisualizeSignalOverlay: i=", i, " name=", name, ", y=", y);
 
    ObjectDelete(name);
    ObjectCreate(name, OBJ_TEXT, 0, Time[i], y);
