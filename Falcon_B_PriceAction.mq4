@@ -8,6 +8,8 @@
 #include <Falcon_B/03_ReadCommandFromCSV.mqh>
 #include <Falcon_B/08_TerminalNumber.mqh>
 #include <Falcon_B/PriceActionStates.mqh>
+#include <Falcon_B/ZigZagStates.mqh>
+#include <Falcon_B/10_isNewBar.mqh>
 
 #property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
 #property copyright "Copyright 2018, Vladimir Zhbanko"
@@ -114,6 +116,9 @@ extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PR
 extern int     PipFinite_UptrendBuffer          = 10;       // PipFinite Uptrend Buffer Number
 extern int     PipFinite_DowntrendBuffer        = 11;       // PipFinite Downtrend Buffer Number
 
+extern bool    UseSRthreshold                   = true;     // Use Support/Resistance Threshold
+extern int     SRthreshold                      = 10;       // Support/Resistance threshold in Pips
+
 string  InternalHeader1="----------Errors Handling Settings-----------";
 int     RetryInterval                           = 100; // Pause Time before next retry (in milliseconds)
 int     MaxRetriesPerTick                       = 10;
@@ -125,15 +130,14 @@ double StopHidden,TakeHidden;
 int YenPairAdjustFactor;
 int    P;
 double myATR;
-double FastMA1, SlowMA1, Price1;
 
 // TDL 3: Declaring Variables (and the extern variables above)
 
 double PipFiniteUptrendSignal1, PipFiniteDowntrendSignal1;
 int EntrySignal;
 
-double KeltnerUpper1, KeltnerLower1;
 int CrossTriggered;
+int SRTriggered;
 
 int OrderNumber;
 double HiddenSLList[][2]; // First dimension is for position ticket numbers, second is for the SL Levels
@@ -194,6 +198,7 @@ int init()
    if(UseHiddenVolTrailing) ArrayResize(HiddenVolTrailingList,MaxPositionsAllowed,0);
 
    PaInit();
+
    
    start();
    return(0);
@@ -207,7 +212,8 @@ int init()
 int deinit()
   {
 //----
-
+    PaDeinit(); // Deinitialize ZigZag indicator
+    ZZInit(); // Reinitialize ZigZag indicator to clear any state
 //----
    return(0);
   }
@@ -219,7 +225,8 @@ int deinit()
 //+------------------------------------------------------------------+
 int start()
   {
-  
+    if(!isNewBar())
+      return (0);
 //----------Order management through R - to avoid slow down the system only enable with external parameters
    if(R_Management)
      {
@@ -238,8 +245,9 @@ int start()
 
 //----------Entry & Exit Variables-----------
 
-   PaResults results = PaProcessBars(1);
-   
+   PaResults paState = PaProcessBars(1);
+   ZZProcessBar();
+      
    if(UsePipFiniteEntry)
     {
       // Get PipFinite indicator values with proper parameters
@@ -272,6 +280,27 @@ int start()
           // else if(OnJournaling) Print("Entry Signal - No crossing detected, Close[2]=", Close[2], ", Close[1]=", Close[1], ", pipFiniteLine=", pipFiniteLine);
     }  
 
+    if(UseSRthreshold)
+    {
+      // SRCheckResult NearSRtriggered =  CheckSupportResistance(Close[1], SRthreshold * (P*Point)); // Check if close price is near support/resistance
+      // if(NearSRtriggered == ABOVE_HIGHER_SR)
+      //   {
+      //     if(OnJournaling) Print("Above Higher SR - ", Close[1]);
+      //   }
+      // else if(NearSRtriggered == BELOW_LOWER_SR)
+      //   {
+      //     if(OnJournaling) Print("Below Lower SR - ", Close[1]);
+      //   }
+      // else if(NearSRtriggered == BELOW_HIGHER_SR)
+      //   {
+      //     if(OnJournaling) Print("Below Higher SR - ", Close[1]);
+      //   } 
+      // else if(NearSRtriggered == ABOVE_LOWER_SR)
+      //   {
+      //     if(OnJournaling) Print("Above Lower SR - ", Close[1]);
+      //   }
+    }
+    
     VisualizeSignalOverlay(1, CrossTriggered);
 
 //----------TP, SL, Breakeven and Trailing Stops Variables-----------
@@ -2157,8 +2186,8 @@ void VisualizeSignalOverlay(int i, int signal)
    double y = 0;
 
    switch(signal) {
-      case 1:   txt = "B";  col = clrYellow;  y = High[i] + 6*y_offset; break;   
-      case 2:   txt = "S";  col = clrYellow;   y = Low[i] - 4*y_offset; break; 
+      case 1:   txt = "(B)";  col = clrYellow;  y = High[i] + 8*y_offset; break;   
+      case 2:   txt = "(S)";  col = clrYellow;   y = Low[i] - 6*y_offset; break; 
       default:  return; //              ObjectDelete("peak_" + IntegerToString(i)); return;
    }
    string name = "signal_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + txt;
