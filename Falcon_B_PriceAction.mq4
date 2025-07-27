@@ -7,9 +7,11 @@
 #include <Falcon_B/02_OrderProfitToCSV.mqh>
 #include <Falcon_B/03_ReadCommandFromCSV.mqh>
 #include <Falcon_B/08_TerminalNumber.mqh>
+#include <Falcon_B/10_isNewBar.mqh>
+#include <Falcon_B/enums.mqh>
 #include <Falcon_B/PriceActionStates.mqh>
 #include <Falcon_B/SupportResistance.mqh>
-#include <Falcon_B/10_isNewBar.mqh>
+
 
 #property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
 #property copyright "Copyright 2018, Vladimir Zhbanko"
@@ -109,7 +111,7 @@ extern double  VolatilityMultiplier             = 3; // In units of ATR
 extern int     ATRTimeframe                     = 60; // In minutes
 extern int     ATRPeriod                        = 14;
 
-extern string  Header15="----------PipFinite Variables-----------";
+extern string  Header15="----------PipFinite rules Variables-----------";
 extern bool    UsePipFiniteEntry                = True;
 extern int     PipFinite_Period                 = 3;       // PipFinite Trend PRO Period
 extern double  PipFinite_TargetFactor           = 2.0;     // PipFinite Trend PRO Target Factor
@@ -117,12 +119,15 @@ extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PR
 extern int     PipFinite_UptrendBuffer          = 10;       // PipFinite Uptrend Buffer Number
 extern int     PipFinite_DowntrendBuffer        = 11;       // PipFinite Downtrend Buffer Number
 
-extern string  Header16="----------Support Resistance Variables-----------";
-extern bool    UseSupportResistance             = False;     // Use Support/Resistance Threshold
+extern string  Header16="----------Support Resistance rules Variables-----------";
+extern bool    UseSupportResistance             = True;     // Use Support/Resistance Threshold
 extern int     SRmarginPips                     = 10;       // Support/Resistance threshold in Pips
 extern int     zigzagDepth                      = 12;       // ZigZag Depth
 extern int     zigzagDeviation                  = 5;        // ZigZag Deviation
 extern int     zigzagBackstep                   = 3;        // ZigZag Backstep
+
+extern string  Header17="----------Trend rules Variables-----------";
+extern bool    UseReversal                        = True;     // Use ZigZag Indicator
 
 string  InternalHeader1="----------Errors Handling Settings-----------";
 int     RetryInterval                           = 100; // Pause Time before next retry (in milliseconds)
@@ -145,6 +150,8 @@ CSupportResistance* sr;
 
 int CrossTriggered;
 int SRTriggered;
+int ConsecutiveFailureCount = 0; // Count consecutive failures for error handling
+int MaxConsecutiveFailures = 5; // Maximum allowed consecutive failures
 
 int OrderNumber;
 double HiddenSLList[][2]; // First dimension is for position ticket numbers, second is for the SL Levels
@@ -254,8 +261,55 @@ int start()
 
    PaResults paState = PaProcessBars(1);
    sr.SRUpdate(0); // Update for current bar
+
+   CrossTriggered = 0;
+   
+   if(UseReversal)
+   {
+      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && paState.trendState == DOWN_TREND)
+      {
+         CrossTriggered = 2; // Sell signal
+         if(OnJournaling) Print("Exit Signal - SELL on reversal to DOWN_TREND");
+      }
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && paState.trendState == UP_TREND)
+      {
+         CrossTriggered = 1; // Buy signal
+         if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND");
+      }
+   } 
       
-   if(UsePipFiniteEntry)
+   // support resistance exit rules
+   if(UseSupportResistance && CrossTriggered == 0)
+   {
+      SRresult SRres = sr.CheckNearSR(Close[1], Time[1], paState.trendState);
+      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (SRres.status == BELOW_RESISTANCE || SRres.status == BELOW_SUPPORT))
+      { 
+        CrossTriggered = 2;
+        if(OnJournaling) Print("Exit Signal - SELL below support or resistance line");
+      } 
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (SRres.status == ABOVE_RESISTANCE || SRres.status == ABOVE_SUPPORT))
+      {
+          CrossTriggered = 1;
+          if(OnJournaling) Print("Exit Signal - BUY above support or resistance line");
+      } else
+      {
+        int CrossTriggeredReversal = Crossed(Close[2], Close[1], SRres.point.price); 
+        if(CrossTriggeredReversal == 1)
+        {
+          CrossTriggered = 1;
+          if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
+        }
+        else if(CrossTriggeredReversal == 2)
+        {
+          CrossTriggered = 2;
+          if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
+        
+        }
+      }
+
+   }
+
+   if(UsePipFiniteEntry && CrossTriggered == 0)
     {
       // Get PipFinite indicator values with proper parameters
       PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
@@ -269,45 +323,23 @@ int start()
       else if (PipFiniteDowntrendSignal1 != EMPTY_VALUE  && PipFiniteDowntrendSignal1 != 0)
         pipFiniteLine = PipFiniteDowntrendSignal1;
       
-      if (pipFiniteLine == EMPTY_VALUE)
+      if (pipFiniteLine != EMPTY_VALUE)
       {
-        CrossTriggered = 0; // Reset CrossTriggered if no signal is available
-        if(OnJournaling) Print("pipFiniteLine trend buffer is EMPTY_VALUE !!!");
-      }
-      else
-        CrossTriggered = Crossed(Close[2], Close[1], pipFiniteLine); // Check if crossed the PipFinite line
-        if(CrossTriggered == 1) // Buy signal after retracement
-          {
+        int CrossTriggeredPF = Crossed(Close[2], Close[1], pipFiniteLine); // Check if crossed the PipFinite line
+        if(CrossTriggeredPF == 1) // Buy signal after retracement
+          { 
+            CrossTriggered = 1;
             if(OnJournaling) Print("Entry Signal - BUY after PipFinite crossing");
           }
-        else if(CrossTriggered == 2) // Sell signal after retracement
+        else if(CrossTriggeredPF == 2) // Sell signal after retracement
           {
+            CrossTriggered = 2;
             if(OnJournaling) Print("Entry Signal - SELL after PipFinite crossing");
           }
           // else if(OnJournaling) Print("Entry Signal - No crossing detected, Close[2]=", Close[2], ", Close[1]=", Close[1], ", pipFiniteLine=", pipFiniteLine);
+      }
     }  
-
-    if(UseSupportResistance)
-    {
-        // SR_STATUS status = sr.CheckNearSR(Close[1], Time[1], SR_UP_TREND);
-      // if(NearSRtriggered == ABOVE_HIGHER_SR)
-      //   {
-      //     if(OnJournaling) Print("Above Higher SR - ", Close[1]);
-      //   }
-      // else if(NearSRtriggered == BELOW_LOWER_SR)
-      //   {
-      //     if(OnJournaling) Print("Below Lower SR - ", Close[1]);
-      //   }
-      // else if(NearSRtriggered == BELOW_HIGHER_SR)
-      //   {
-      //     if(OnJournaling) Print("Below Higher SR - ", Close[1]);
-      //   } 
-      // else if(NearSRtriggered == ABOVE_LOWER_SR)
-      //   {
-      //     if(OnJournaling) Print("Above Lower SR - ", Close[1]);
-      //   }
-    }
-    
+  
     VisualizeSignalOverlay(1, CrossTriggered);
 
 //----------TP, SL, Breakeven and Trailing Stops Variables-----------
