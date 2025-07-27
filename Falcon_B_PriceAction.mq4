@@ -150,8 +150,9 @@ CSupportResistance* sr;
 
 int CrossTriggered;
 int SRTriggered;
+
 int ConsecutiveFailureCount = 0; // Count consecutive failures for error handling
-int MaxConsecutiveFailures = 5; // Maximum allowed consecutive failures
+int MaxConsecutiveFailures = 3; // Maximum allowed consecutive failures
 
 int OrderNumber;
 double HiddenSLList[][2]; // First dimension is for position ticket numbers, second is for the SL Levels
@@ -340,6 +341,26 @@ int start()
       }
     }  
   
+    if(ConsecutiveFailureCount > MaxConsecutiveFailures)
+    {
+      // only breakout wil allow new trades
+      SRresult SRres = sr.CheckNearSR(Close[1], Time[1], paState.trendState);
+      int CrossTriggeredReversal = Crossed(Close[2], Close[1], SRres.point.price); 
+      if(CrossTriggeredReversal == 1)
+      {
+        ConsecutiveFailureCount = 0;
+        CrossTriggered = 1;
+        if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
+      }
+      else if(CrossTriggeredReversal == 2)
+      {
+        ConsecutiveFailureCount = 0;
+        CrossTriggered = 2;
+        if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
+      
+      }
+    }
+
     VisualizeSignalOverlay(1, CrossTriggered);
 
 //----------TP, SL, Breakeven and Trailing Stops Variables-----------
@@ -433,7 +454,17 @@ int start()
       CloseOrderPosition(OP_SELL, OnJournaling, MagicNumber, Slippage, P, RetryInterval);
      }
 
+    if(GetLastClosedOrderProfitByTime() < 0)
+    {
+      ConsecutiveFailureCount++;
+    }
+
 //----------Entry Rules (Market and Pending) -----------
+    if(ConsecutiveFailureCount > MaxConsecutiveFailures)
+    { 
+      if(OnJournaling) Print("Max consecutive failures reached, waiting for breakout");
+      return (0);
+    }
 
    if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(CrossTriggered))==False) 
       if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
