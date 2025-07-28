@@ -2291,9 +2291,12 @@ void VisualizeSignalOverlay(int i, int signal)
    double y_offset = 0.1 * P * Point; // Small offset above/below close
    double y = 0;
 
+   double maxVal = MathMax(Low[i], High[i]);
+   double minVal = MathMin(Low[i], High[i]);
+
    switch(signal) {
-      case 1:   txt = "(B)";  col = clrYellow;  y = High[i] + 8*y_offset; break;   
-      case 2:   txt = "(S)";  col = clrYellow;   y = Low[i] - 6*y_offset; break; 
+      case 1:   txt = "(B)";  col = clrYellow;  y = maxVal + 8*y_offset; break;   
+      case 2:   txt = "(S)";  col = clrYellow;   y = minVal - 4*y_offset; break; 
       default:  return; //              ObjectDelete("peak_" + IntegerToString(i)); return;
    }
    string name = "signal_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + txt;
