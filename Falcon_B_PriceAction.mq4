@@ -129,6 +129,12 @@ extern int     zigzagBackstep                   = 3;        // ZigZag Backstep
 extern string  Header17="----------Trend rules Variables-----------";
 extern bool    UseReversal                        = True;     // Use ZigZag Indicator
 
+extern string  Header18="----------Trading time Variables-----------";
+extern int     TradingStartHour                   = 0;        // Start hour for trading (0-23)
+extern int     TradingEndHour                     = 23;       // End hour for trading (0-23)
+extern int     TradingStartMinute                 = 0;        // Start minute for trading (0-59)
+extern int     TradingEndMinute                   = 59;       // End minute for trading (0-59)
+
 string  InternalHeader1="----------Errors Handling Settings-----------";
 int     RetryInterval                           = 100; // Pause Time before next retry (in milliseconds)
 int     MaxRetriesPerTick                       = 10;
@@ -151,8 +157,8 @@ CSupportResistance* sr;
 int CrossTriggered;
 int SRTriggered;
 
-int ConsecutiveFailureCount = 0; // Count consecutive failures for error handling
 int MaxConsecutiveFailures = 3; // Maximum allowed consecutive failures
+bool BreakoutTriggered = false; // Flag for breakout condition
 
 int OrderNumber;
 double HiddenSLList[][2]; // First dimension is for position ticket numbers, second is for the SL Levels
@@ -341,24 +347,34 @@ int start()
       }
     }  
   
-    if(ConsecutiveFailureCount > MaxConsecutiveFailures)
+    if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures)
     {
-      // only breakout wil allow new trades
-      SRresult SRres = sr.CheckNearSR(Close[1], Time[1], paState.trendState);
-      int CrossTriggeredReversal = Crossed(Close[2], Close[1], SRres.point.price); 
-      if(CrossTriggeredReversal == 1)
+      if(!BreakoutTriggered) // If max consecutive failures reached and breakout not triggered
       {
-        ConsecutiveFailureCount = 0;
-        CrossTriggered = 1;
-        if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
+        // only breakout wil allow new trades
+        SRresult SRres = sr.CheckNearSR(Close[1], Time[1], paState.trendState);
+        if(SRres.status != NOT_NEAR_SR)
+        { // If we are near support or resistance, check for breakout
+          int CrossTriggeredReversal = Crossed(Close[2], Close[1], SRres.point.price); // check breakout condition
+          if(CrossTriggeredReversal == 1)
+          {
+            BreakoutTriggered = true; // Reset breakout flag
+            CrossTriggered = 1;
+            if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
+          }
+          else if(CrossTriggeredReversal == 2)
+          {
+            BreakoutTriggered = true; // Reset breakout flag
+            CrossTriggered = 2;
+            if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
+          
+          }
+        }
       }
-      else if(CrossTriggeredReversal == 2)
-      {
-        ConsecutiveFailureCount = 0;
-        CrossTriggered = 2;
-        if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
-      
-      }
+    }
+    else
+    {
+      BreakoutTriggered = false; // Reset breakout flag if not triggered
     }
 
     VisualizeSignalOverlay(1, CrossTriggered);
@@ -454,13 +470,19 @@ int start()
       CloseOrderPosition(OP_SELL, OnJournaling, MagicNumber, Slippage, P, RetryInterval);
      }
 
-    if(GetLastClosedOrderProfitByTime() < 0)
-    {
-      ConsecutiveFailureCount++;
-    }
 
 //----------Entry Rules (Market and Pending) -----------
-    if(ConsecutiveFailureCount > MaxConsecutiveFailures)
+    if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
+    {
+      datetime localTime = TimeLocal();
+      if(TimeHour(localTime) < TradingStartHour || (TimeHour(localTime) == TradingStartHour && TimeMinute(localTime) < TradingStartMinute) || TimeHour(localTime) > TradingEndHour || (TimeHour(localTime) == TradingEndHour && TimeMinute(localTime) > TradingEndMinute))
+      {
+        if(OnJournaling) Print("waiting for valid trading time: ", TimeHour(localTime), ":", TimeMinute(localTime));
+        return (0);
+      }
+    }
+
+    if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures && !BreakoutTriggered) // If max consecutive failures reached and breakout not triggered
     { 
       if(OnJournaling) Print("Max consecutive failures reached, waiting for breakout");
       return (0);
