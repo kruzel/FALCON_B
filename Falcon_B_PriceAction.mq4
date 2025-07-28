@@ -284,6 +284,20 @@ int start()
          if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND");
       }
    } 
+
+   if(CountPosOrders(MagicNumber,-1) == 0)
+    {
+        if(paState.prevTrendState == UP_TREND_RETRACEMENT && paState.trendState == UP_TREND)
+        {
+            CrossTriggered = 1; // Buy signal
+            if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after retracement");
+        }
+        else if(paState.prevTrendState == DOWN_TREND_RETRACEMENT && paState.trendState == DOWN_TREND)
+        {
+            CrossTriggered = 2; // Sell signal
+            if(OnJournaling) Print("Entry Signal - SELL on DOWN_TREND after retracement");
+        }
+    }
       
    // support resistance exit rules
    if(UseSupportResistance && CrossTriggered == 0)
