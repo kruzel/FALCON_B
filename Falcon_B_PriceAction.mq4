@@ -330,11 +330,12 @@ int start()
 
    }
 
-       if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures)
+    if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures)
     {
       if(!BreakoutTriggered) // If max consecutive failures reached and breakout not triggered
       {
         // only breakout wil allow new trades
+        CrossTriggered = 0; // Reset CrossTriggered to no signal
         SRresult SRres = sr.CheckNearSR(Close[1], Time[1], paState.trendState);
         if(SRres.status != NOT_NEAR_SR)
         { // If we are near support or resistance, check for breakout
@@ -392,18 +393,22 @@ int start()
               if(OnJournaling) Print("Entry Signal - SELL after PipFinite crossing");
             }
         }
-        else if(Close[1] > pipFiniteLine && CrossTriggered == 2) // If we are in a sell position and crossed above the PipFinite line
-        {
-          CrossTriggered = 0; // Reset to no signal
-          if(OnJournaling) Print("SELL signal canceled - only buy allowed above pipFinite line");
-        }
-        else if(Close[1] < pipFiniteLine && CrossTriggered == 1) // If we are in a buy position and crossed below the PipFinite line
-        {
-          CrossTriggered = 0; // Reset to no signal
-          if(OnJournaling) Print("BUY signal canceled - only sell allowed below pipFinite line");
-        }
+        
+      }
+
+      if(Close[1] > pipFiniteLine && CrossTriggered == 2) // If we are in a sell position and crossed above the PipFinite line
+      {
+        CrossTriggered = 0; // Reset to no signal
+        if(OnJournaling) Print("SELL signal canceled - only buy allowed above pipFinite line");
+      }
+      else if(Close[1] < pipFiniteLine && CrossTriggered == 1) // If we are in a buy position and crossed below the PipFinite line
+      {
+        CrossTriggered = 0; // Reset to no signal
+        if(OnJournaling) Print("BUY signal canceled - only sell allowed below pipFinite line");
       }
     }  
+
+    
 
     VisualizeSignalOverlay(1, CrossTriggered);
 
