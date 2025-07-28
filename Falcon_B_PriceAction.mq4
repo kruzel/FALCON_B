@@ -316,38 +316,7 @@ int start()
 
    }
 
-   if(UsePipFiniteEntry && CrossTriggered == 0)
-    {
-      // Get PipFinite indicator values with proper parameters
-      PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
-      PipFiniteDowntrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_DowntrendBuffer, 1); // Buffer for Downtrend, Shift 1
-
-      // Calculate entry signals using Close[2] and Close[1] for crossing logic
-      // Use main trend line - choose uptrend or downtrend based on which has valid data
-      double pipFiniteLine = EMPTY_VALUE;
-      if (PipFiniteUptrendSignal1 != EMPTY_VALUE && PipFiniteUptrendSignal1 != 0)
-        pipFiniteLine = PipFiniteUptrendSignal1;
-      else if (PipFiniteDowntrendSignal1 != EMPTY_VALUE  && PipFiniteDowntrendSignal1 != 0)
-        pipFiniteLine = PipFiniteDowntrendSignal1;
-      
-      if (pipFiniteLine != EMPTY_VALUE)
-      {
-        int CrossTriggeredPF = Crossed(Close[2], Close[1], pipFiniteLine); // Check if crossed the PipFinite line
-        if(CrossTriggeredPF == 1) // Buy signal after retracement
-          { 
-            CrossTriggered = 1;
-            if(OnJournaling) Print("Entry Signal - BUY after PipFinite crossing");
-          }
-        else if(CrossTriggeredPF == 2) // Sell signal after retracement
-          {
-            CrossTriggered = 2;
-            if(OnJournaling) Print("Entry Signal - SELL after PipFinite crossing");
-          }
-          // else if(OnJournaling) Print("Entry Signal - No crossing detected, Close[2]=", Close[2], ", Close[1]=", Close[1], ", pipFiniteLine=", pipFiniteLine);
-      }
-    }  
-  
-    if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures)
+       if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures)
     {
       if(!BreakoutTriggered) // If max consecutive failures reached and breakout not triggered
       {
@@ -376,6 +345,51 @@ int start()
     {
       BreakoutTriggered = false; // Reset breakout flag if not triggered
     }
+
+    //----------PipFinite Entry Rules-----------
+    //must be last decision to avoid other rules to override it
+   if(UsePipFiniteEntry)
+    {
+      // Get PipFinite indicator values with proper parameters
+      PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
+      PipFiniteDowntrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_DowntrendBuffer, 1); // Buffer for Downtrend, Shift 1
+
+      // Calculate entry signals using Close[2] and Close[1] for crossing logic
+      // Use main trend line - choose uptrend or downtrend based on which has valid data
+      double pipFiniteLine = EMPTY_VALUE;
+      if (PipFiniteUptrendSignal1 != EMPTY_VALUE && PipFiniteUptrendSignal1 != 0)
+        pipFiniteLine = PipFiniteUptrendSignal1;
+      else if (PipFiniteDowntrendSignal1 != EMPTY_VALUE  && PipFiniteDowntrendSignal1 != 0)
+        pipFiniteLine = PipFiniteDowntrendSignal1;
+      
+      if (pipFiniteLine != EMPTY_VALUE)
+      {
+        if(CrossTriggered == 0)
+        {
+          int CrossTriggeredPF = Crossed(Close[2], Close[1], pipFiniteLine); // Check if crossed the PipFinite line
+          if(CrossTriggeredPF == 1) // Buy signal after retracement
+            { 
+              CrossTriggered = 1;
+              if(OnJournaling) Print("Entry Signal - BUY after PipFinite crossing");
+            }
+          else if(CrossTriggeredPF == 2) // Sell signal after retracement
+            {
+              CrossTriggered = 2;
+              if(OnJournaling) Print("Entry Signal - SELL after PipFinite crossing");
+            }
+        }
+        else if(Close[1] > pipFiniteLine && CrossTriggered == 2) // If we are in a sell position and crossed above the PipFinite line
+        {
+          CrossTriggered = 0; // Reset to no signal
+          if(OnJournaling) Print("SELL signal canceled - only buy allowed above pipFinite line");
+        }
+        else if(Close[1] < pipFiniteLine && CrossTriggered == 1) // If we are in a buy position and crossed below the PipFinite line
+        {
+          CrossTriggered = 0; // Reset to no signal
+          if(OnJournaling) Print("BUY signal canceled - only sell allowed below pipFinite line");
+        }
+      }
+    }  
 
     VisualizeSignalOverlay(1, CrossTriggered);
 
