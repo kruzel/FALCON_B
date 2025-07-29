@@ -489,6 +489,13 @@ int start()
         return (0); // Exit without opening new trades
       }
 
+   if(MarketInfo(Symbol(), MODE_SPREAD) > MaxSpread * P)
+     {
+      Trigger = 0; // Reset trigger to no signal
+      if(OnJournaling) Print("Current spread is too high: ", currentSpread, " pips. Max allowed: ", MaxSpread * P, " pips");
+      return (0); // Exit if spread is too high
+     }
+
    if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger))==False) 
       if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
          if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==False)
