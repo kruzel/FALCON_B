@@ -144,7 +144,7 @@ string  InternalHeader2="----------Service Variables-----------";
 
 double Stop,Take;
 double StopHidden,TakeHidden;
-int YenPairAdjustFactor;
+int YenPairAdjustFactor = 1;
 int    P;
 double myATR;
 
@@ -207,7 +207,7 @@ int init()
 //---------             
    
    P=GetP(); // To account for 5 digit brokers. Used to convert pips to decimal place
-   YenPairAdjustFactor=GetYenAdjustFactor(); // Adjust for YenPair
+  //  YenPairAdjustFactor=GetYenAdjustFactor(); // Adjust for YenPair
 
 //----------(Hidden) TP, SL and Breakeven Stops Variables-----------  
 
@@ -335,6 +335,7 @@ int start()
     
     //----------PipFinite Entry Rules-----------
     //must be last decision to avoid other rules to override it
+    double pipFiniteLine = EMPTY_VALUE;
    if(UsePipFiniteEntry)
     {
       // Get PipFinite indicator values with proper parameters
@@ -343,7 +344,7 @@ int start()
 
       // Calculate entry signals using Close[2] and Close[1] for crossing logic
       // Use main trend line - choose uptrend or downtrend based on which has valid data
-      double pipFiniteLine = EMPTY_VALUE;
+      
       if (PipFiniteUptrendSignal1 != EMPTY_VALUE && PipFiniteUptrendSignal1 != 0)
         pipFiniteLine = PipFiniteUptrendSignal1;
       else if (PipFiniteDowntrendSignal1 != EMPTY_VALUE  && PipFiniteDowntrendSignal1 != 0)
@@ -366,17 +367,6 @@ int start()
             }
         }
         
-      }
-
-      if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
-      {
-        Trigger = 0; // Reset to no signal
-        if(OnJournaling) Print("SELL signal canceled - only buy allowed above pipFinite line");
-      }
-      else if(Close[1] < pipFiniteLine && Trigger == 1) // ignore buy signals below the PipFinite line
-      {
-        Trigger = 0; // Reset to no signal
-        if(OnJournaling) Print("BUY signal canceled - only sell allowed below pipFinite line");
       }
     }  
 
@@ -472,6 +462,22 @@ int start()
      }
 
 //----------Entry Rules (Market and Pending) -----------
+    if(UsePipFiniteEntry)
+    {
+      if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
+      {
+        Trigger = 0; // Reset to no signal
+        if(OnJournaling) Print("SELL signal canceled - only buy allowed above pipFinite line");
+        return (0); // Exit if no valid signal
+      }
+      else if(Close[1] < pipFiniteLine && Trigger == 1) // ignore buy signals below the PipFinite line
+      {
+        Trigger = 0; // Reset to no signal
+        if(OnJournaling) Print("BUY signal canceled - only sell allowed below pipFinite line");
+        return (0); // Exit if no valid signal
+      }
+    }
+
     if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
     {
       datetime localTime = TimeLocal();
@@ -780,7 +786,7 @@ int OpenPositionMarket(int TYPE,double LOT,double SL,double TP,int Magic,int Sli
    double volume=CheckLot(LOT,Journaling);
    if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume>AccountFreeMargin())
      {
-      Print("Can not open a trade. Not enough free margin to open "+(string)volume+" on "+symbol);
+      Print("Can not open a trade. Not enough free margin to open "+(string)volume+" on "+symbol, " margin required: ", MarketInfo(symbol,MODE_MARGINREQUIRED), " volume: ", volume, " free margin: ", AccountFreeMargin());
       return(-1);
      }
    int slippage=Slip*K; // Slippage is in points. 1 point = 0.0001 on 4 digit broker and 0.00001 on a 5 digit broker
