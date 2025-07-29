@@ -33,7 +33,7 @@ extern string  Header1="----------EA General Settings-----------";
 extern int     MagicNumber                      = 8118201;
 extern int     TerminalType                     = 1;         //0 mean slave, 1 mean master
 extern bool    R_Management                     = False;      //R_Management true will enable Decision Support Centre (using R)
-extern int     Slippage                         = 3; // In Pips
+extern int     Slippage                         = 3; // Slippage in Pips
 extern bool    IsECNbroker                      = False; // Is your broker an ECN
 extern bool    OnJournaling                     = True; // Add EA updates in the Journal Tab
 
@@ -303,7 +303,7 @@ int start()
    // support resistance exit rules
    if(UseSupportResistance)
    {
-      SRresult SRres = sr.CheckNearSR(Close[1], Time[1], paState.trendState);
+      SRresult SRres = sr.CheckNearSR(Close[1], paState.trendState);
       if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (SRres.status == BELOW_RESISTANCE || SRres.status == BELOW_SUPPORT))
       { 
         Trigger = 2;
@@ -315,16 +315,16 @@ int start()
           if(OnJournaling) Print("Exit Signal - BUY above support or resistance line");
       } 
       
-      int SRCrossTriggered = Crossed(Close[2], Close[1], SRres.point.price); 
+      int SRCrossTriggered = sr.CheckSRCrossed(Close[2], Close[1]); 
       if(SRCrossTriggered == 1)
       {
-        BreakoutTriggered = true; // Reset breakout flag
+        BreakoutTriggered = true; // set breakout flag
         Trigger = 1;
         if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
       }
       else if(SRCrossTriggered == 2)
       {
-        BreakoutTriggered = true; // Reset breakout flag
+        BreakoutTriggered = true; // set breakout flag
         Trigger = 2;
         if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
       
@@ -489,10 +489,10 @@ int start()
         return (0); // Exit without opening new trades
       }
 
-   double currentSpread = MarketInfo(Symbol(), MODE_SPREAD);
-   if( currentSpread > MaxSpread * P)
+   double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); //points
+   if( currentSpread / P > MaxSpread )
      {
-      if(OnJournaling) Print("Current spread is too high: ", currentSpread, " pips. Max allowed: ", MaxSpread * P, " pips");
+      if(OnJournaling) Print("Current spread is too high: ", currentSpread / P, " pips. Max allowed: ", MaxSpread, " pips");
       return (0); // Exit if spread is too high
      }
 
@@ -502,6 +502,7 @@ int start()
            {
             if(TradeAllowed && EntrySignal(Trigger)==1)
               { // Open Long Positions
+                BreakoutTriggered = false; // Reset breakout flag
                VisualizeSignalOverlay(1, Trigger);
 
                OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
@@ -522,6 +523,7 @@ int start()
    
             if(TradeAllowed && EntrySignal(Trigger)==2)
               { // Open Short Positions
+                BreakoutTriggered = false; // Reset breakout flag
                VisualizeSignalOverlay(1, Trigger);
 
                OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
