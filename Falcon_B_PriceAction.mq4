@@ -43,6 +43,7 @@ extern double  Lots                             = 0.01;
 extern bool    IsSizingOn                       = False;
 extern double  Risk                             = 1; // Risk per trade (in percentage)
 extern int     MaxPositionsAllowed              = 1;
+extern double  MaxSpread                        = 3; // Maximum spread allowed in Pips
 
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
@@ -154,7 +155,7 @@ int EntrySignal;
 
 CSupportResistance* sr;
 
-int CrossTriggered;
+int Trigger;
 int SRTriggered;
 
 int MaxConsecutiveFailures = 3; // Maximum allowed consecutive failures
@@ -269,18 +270,18 @@ int start()
    PaResults paState = PaProcessBars(1);
    sr.SRUpdate(0); // Update for current bar
 
-   CrossTriggered = 0;
+   Trigger = 0;
    
    if(UseReversal)
    {
       if(CountPosOrders(MagicNumber,OP_BUY)>=1 && paState.trendState == DOWN_TREND)
       {
-         CrossTriggered = 2; // Sell signal
+         Trigger = 2; // Sell signal
          if(OnJournaling) Print("Exit Signal - SELL on reversal to DOWN_TREND");
       }
       else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && paState.trendState == UP_TREND)
       {
-         CrossTriggered = 1; // Buy signal
+         Trigger = 1; // Buy signal
          if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND");
       }
    } 
@@ -289,78 +290,49 @@ int start()
     {
         if(paState.prevTrendState == UP_TREND_RETRACEMENT && paState.trendState == UP_TREND)
         {
-            CrossTriggered = 1; // Buy signal
+            Trigger = 1; // Buy signal
             if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after retracement");
         }
         else if(paState.prevTrendState == DOWN_TREND_RETRACEMENT && paState.trendState == DOWN_TREND)
         {
-            CrossTriggered = 2; // Sell signal
+            Trigger = 2; // Sell signal
             if(OnJournaling) Print("Entry Signal - SELL on DOWN_TREND after retracement");
         }
     }
       
    // support resistance exit rules
-   if(UseSupportResistance && CrossTriggered == 0)
+   if(UseSupportResistance)
    {
       SRresult SRres = sr.CheckNearSR(Close[1], Time[1], paState.trendState);
       if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (SRres.status == BELOW_RESISTANCE || SRres.status == BELOW_SUPPORT))
       { 
-        CrossTriggered = 2;
+        Trigger = 2;
         if(OnJournaling) Print("Exit Signal - SELL below support or resistance line");
       } 
       else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (SRres.status == ABOVE_RESISTANCE || SRres.status == ABOVE_SUPPORT))
       {
-          CrossTriggered = 1;
+          Trigger = 1;
           if(OnJournaling) Print("Exit Signal - BUY above support or resistance line");
-      } else
+      } 
+      
+      int SRCrossTriggered = Crossed(Close[2], Close[1], SRres.point.price); 
+      if(SRCrossTriggered == 1)
       {
-        int CrossTriggeredReversal = Crossed(Close[2], Close[1], SRres.point.price); 
-        if(CrossTriggeredReversal == 1)
-        {
-          CrossTriggered = 1;
-          if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
-        }
-        else if(CrossTriggeredReversal == 2)
-        {
-          CrossTriggered = 2;
-          if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
-        
-        }
+        BreakoutTriggered = true; // Reset breakout flag
+        Trigger = 1;
+        if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
       }
-
+      else if(SRCrossTriggered == 2)
+      {
+        BreakoutTriggered = true; // Reset breakout flag
+        Trigger = 2;
+        if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
+      
+      }
+      
    }
 
-    if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures)
-    {
-      if(!BreakoutTriggered) // If max consecutive failures reached and breakout not triggered
-      {
-        // only breakout wil allow new trades
-        CrossTriggered = 0; // Reset CrossTriggered to no signal
-        SRresult SRres = sr.CheckNearSR(Close[1], Time[1], paState.trendState);
-        if(SRres.status != NOT_NEAR_SR)
-        { // If we are near support or resistance, check for breakout
-          int CrossTriggeredReversal = Crossed(Close[2], Close[1], SRres.point.price); // check breakout condition
-          if(CrossTriggeredReversal == 1)
-          {
-            BreakoutTriggered = true; // Reset breakout flag
-            CrossTriggered = 1;
-            if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
-          }
-          else if(CrossTriggeredReversal == 2)
-          {
-            BreakoutTriggered = true; // Reset breakout flag
-            CrossTriggered = 2;
-            if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
-          
-          }
-        }
-      }
-    }
-    else
-    {
-      BreakoutTriggered = false; // Reset breakout flag if not triggered
-    }
-
+    
     //----------PipFinite Entry Rules-----------
     //must be last decision to avoid other rules to override it
    if(UsePipFiniteEntry)
@@ -379,38 +351,34 @@ int start()
       
       if (pipFiniteLine != EMPTY_VALUE)
       {
-        if(CrossTriggered == 0)
+        if(Trigger == 0)
         {
           int CrossTriggeredPF = Crossed(Close[2], Close[1], pipFiniteLine); // Check if crossed the PipFinite line
           if(CrossTriggeredPF == 1) // Buy signal after retracement
             { 
-              CrossTriggered = 1;
+              Trigger = 1;
               if(OnJournaling) Print("Entry Signal - BUY after PipFinite crossing");
             }
           else if(CrossTriggeredPF == 2) // Sell signal after retracement
             {
-              CrossTriggered = 2;
+              Trigger = 2;
               if(OnJournaling) Print("Entry Signal - SELL after PipFinite crossing");
             }
         }
         
       }
 
-      if(Close[1] > pipFiniteLine && CrossTriggered == 2) // If we are in a sell position and crossed above the PipFinite line
+      if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
       {
-        CrossTriggered = 0; // Reset to no signal
+        Trigger = 0; // Reset to no signal
         if(OnJournaling) Print("SELL signal canceled - only buy allowed above pipFinite line");
       }
-      else if(Close[1] < pipFiniteLine && CrossTriggered == 1) // If we are in a buy position and crossed below the PipFinite line
+      else if(Close[1] < pipFiniteLine && Trigger == 1) // ignore buy signals below the PipFinite line
       {
-        CrossTriggered = 0; // Reset to no signal
+        Trigger = 0; // Reset to no signal
         if(OnJournaling) Print("BUY signal canceled - only sell allowed below pipFinite line");
       }
     }  
-
-    
-
-    VisualizeSignalOverlay(1, CrossTriggered);
 
 //----------TP, SL, Breakeven and Trailing Stops Variables-----------
 
@@ -418,7 +386,7 @@ int start()
    
    if(SlTpbyLastBar) 
     {
-      if(CrossTriggered==1) // Buy
+      if(Trigger==1) // Buy
         {
           Stop=(Ask - MathMin(Close[1],Open[1]))/(P*Point); // Stop Loss in Pips
           if(Stop<MinStopLossATR) // If the last bar is a Doji
@@ -429,7 +397,7 @@ int start()
             
           Take=Stop*TpSlRatio;
         } 
-        else if(CrossTriggered==2) 
+        else if(Trigger==2) 
         { // Sell
           Stop=(MathMax(Close[1],Open[1])-Bid)/(P*Point); // Stop Loss in Pips
           if(Stop<MinStopLossATR) // If the last bar is a Doji
@@ -445,9 +413,9 @@ int start()
     { // Use Fixed Stop Loss
       if(UseFixedStopLoss==True) 
       {
-        if(CrossTriggered==1) // Buy
+        if(Trigger==1) // Buy
           Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
-        else if(CrossTriggered==2) // Sell
+        else if(Trigger==2) // Sell
           Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
       }  
       else 
@@ -457,9 +425,9 @@ int start()
 
       if(UseFixedTakeProfit==True) 
       {
-        if(CrossTriggered==1) // Buy
+        if(Trigger==1) // Buy
           Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
-        else if(CrossTriggered==2) // Sell
+        else if(Trigger==2) // Sell
           Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
       }  else {
         Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,P);
@@ -493,16 +461,15 @@ int start()
 
    // TDL 2: Setting up Exit rules. Modify the ExitSignal() function to suit your needs.
 
-   if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(CrossTriggered)==2)
+   if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(Trigger)==2)
      { // Close Long Positions
       CloseOrderPosition(OP_BUY, OnJournaling, MagicNumber, Slippage, P, RetryInterval); 
 
      }
-   if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ExitSignal(CrossTriggered)==1)
+   if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ExitSignal(Trigger)==1)
      { // Close Short Positions
       CloseOrderPosition(OP_SELL, OnJournaling, MagicNumber, Slippage, P, RetryInterval);
      }
-
 
 //----------Entry Rules (Market and Pending) -----------
     if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
@@ -515,18 +482,21 @@ int start()
       }
     }
 
-    if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures && !BreakoutTriggered) // If max consecutive failures reached and breakout not triggered
-    { 
-      if(OnJournaling) Print("Max consecutive failures reached, waiting for breakout");
-      return (0);
-    }
+    if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures && !BreakoutTriggered)
+    {
+        Trigger = 0; // Reset trigger to no signal
+        if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until reset");
+        return (0); // Exit without opening new trades
+      }
 
-   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(CrossTriggered))==False) 
+   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger))==False) 
       if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
          if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==False)
            {
-            if(TradeAllowed && EntrySignal(CrossTriggered)==1)
+            if(TradeAllowed && EntrySignal(Trigger)==1)
               { // Open Long Positions
+               VisualizeSignalOverlay(1, Trigger);
+
                OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
    
                // Set Stop Loss value for Hidden SL
@@ -543,8 +513,10 @@ int start()
              
               }
    
-            if(TradeAllowed && EntrySignal(CrossTriggered)==2)
+            if(TradeAllowed && EntrySignal(Trigger)==2)
               { // Open Short Positions
+               VisualizeSignalOverlay(1, Trigger);
+
                OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,YenPairAdjustFactor,Stop,P),Stop,Take,MagicNumber,Slippage,OnJournaling,P,IsECNbroker,MaxRetriesPerTick,RetryInterval);
    
                // Set Stop Loss value for Hidden SL
