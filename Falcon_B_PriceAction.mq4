@@ -41,9 +41,9 @@ extern string  Header3="----------Position Sizing Settings-----------";
 extern string  Lot_explanation                  = "If IsSizingOn = true, Lots variable will be ignored";
 extern double  Lots                             = 0.01;
 extern bool    IsSizingOn                       = False;
-extern double  Risk                             = 1; // Risk per trade (in percentage)
+extern double  Risk                             = 1; // Risk per trade (%)
 extern int     MaxPositionsAllowed              = 1;
-extern double  MaxSpread                        = 3; // Maximum spread allowed in Pips
+extern double  MaxSpread                        = 5; // Maximum spread (Pips)
 
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
@@ -314,22 +314,23 @@ int start()
           Trigger = 1;
           if(OnJournaling) Print("Exit Signal - BUY above support or resistance line");
       } 
-      
-      int SRCrossTriggered = sr.CheckSRCrossed(Close[2], Close[1]); 
-      if(SRCrossTriggered == 1)
-      {
-        BreakoutTriggered = true; // set breakout flag
-        Trigger = 1;
-        if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
+      else
+      { //if there are no open position, check for entry signal
+        int SRCrossTriggered = sr.CheckSRCrossed(Close[2], Close[1]); 
+        if(SRCrossTriggered == 1)
+        {
+          BreakoutTriggered = true; // set breakout flag
+          Trigger = 1;
+          if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
+        }
+        else if(SRCrossTriggered == 2)
+        {
+          BreakoutTriggered = true; // set breakout flag
+          Trigger = 2;
+          if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
+        
+        }
       }
-      else if(SRCrossTriggered == 2)
-      {
-        BreakoutTriggered = true; // set breakout flag
-        Trigger = 2;
-        if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
-      
-      }
-      
    }
 
     
@@ -491,7 +492,7 @@ int start()
     if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures && !BreakoutTriggered)
     {
         Trigger = 0; // Reset trigger to no signal
-        if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until reset");
+        if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
         return (0); // Exit without opening new trades
       }
 
