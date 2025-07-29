@@ -489,9 +489,9 @@ int start()
         return (0); // Exit without opening new trades
       }
 
-   if(MarketInfo(Symbol(), MODE_SPREAD) > MaxSpread * P)
+   double currentSpread = MarketInfo(Symbol(), MODE_SPREAD);
+   if( currentSpread > MaxSpread * P)
      {
-      Trigger = 0; // Reset trigger to no signal
       if(OnJournaling) Print("Current spread is too high: ", currentSpread, " pips. Max allowed: ", MaxSpread * P, " pips");
       return (0); // Exit if spread is too high
      }
