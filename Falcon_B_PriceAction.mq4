@@ -489,12 +489,15 @@ int start()
         return (0); // Exit without opening new trades
       }
 
-   double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); //points
-   if( currentSpread / P > MaxSpread )
+   double currentSpread = MarketInfo(Symbol(), MODE_SPREAD) / P; //points
+  //  Print("Current spread= ", currentSpread, " pips. Max allowed: ", MaxSpread, " pips", " P=", P, " Point=", Point);
+   if( currentSpread >= MaxSpread )
      {
-      if(OnJournaling) Print("Current spread is too high: ", currentSpread / P, " pips. Max allowed: ", MaxSpread, " pips");
+      if(OnJournaling) Print("Current spread is too high: ", currentSpread, " pips. Max allowed: ", MaxSpread, " pips");
       return (0); // Exit if spread is too high
      }
+
+    // if(OnJournaling) Print("Stop=", Stop, " Take=", Take);;
 
    if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger))==False) 
       if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
@@ -1057,7 +1060,12 @@ int GetP()
 // This function returns P, which is used for converting pips to decimals/points
 
    int output;
-   if(Digits==5 || Digits==3) output=10;else output=1;
+   if(Digits==5 || Digits==3) 
+      output=10;
+   else if(Digits==4 || Digits==2)
+      output=10;
+   else
+      output=1;
    return(output);
 
 /* Some definitions: Pips vs Point
