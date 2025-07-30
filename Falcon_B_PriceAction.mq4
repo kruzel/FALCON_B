@@ -121,16 +121,20 @@ extern int     PipFinite_UptrendBuffer          = 10;       // PipFinite Uptrend
 extern int     PipFinite_DowntrendBuffer        = 11;       // PipFinite Downtrend Buffer Number
 
 extern string  Header16="----------Support Resistance rules Variables-----------";
-extern bool    UseSupportResistance             = True;     // Use Support/Resistance Threshold
+extern bool    UseSupportResistance             = False;     // Use Support/Resistance Threshold
 extern int     SRmarginPips                     = 10;       // Support/Resistance threshold in Pips
 extern int     zigzagDepth                      = 12;       // ZigZag Depth
 extern int     zigzagDeviation                  = 5;        // ZigZag Deviation
 extern int     zigzagBackstep                   = 3;        // ZigZag Backstep
 
-extern string  Header17="----------Trend rules Variables-----------";
+extern string  Header17="---------- Supply and Demand rules Variables-----------";
+extern bool    UseSupplyDemand                  = True;     // Use Supply and Demand Zones
+extern int     supplyDemandMarginPips            = 10;       // Supply and Demand threshold in Pips
+
+extern string  Header18="----------Trend rules Variables-----------";
 extern bool    UseReversal                        = True;     // Use ZigZag Indicator
 
-extern string  Header18="----------Trading time Variables-----------";
+extern string  Header19="----------Trading time Variables-----------";
 extern int     TradingStartHour                   = 0;        // Start hour for trading (0-23)
 extern int     TradingEndHour                     = 23;       // End hour for trading (0-23)
 extern int     TradingStartMinute                 = 0;        // Start minute for trading (0-59)
@@ -172,6 +176,16 @@ double HiddenVolTrailingList[][3]; // First dimension is for position ticket num
 string  InternalHeader3="----------Decision Support Variables-----------";
 bool     TradeAllowed = true; 
 datetime ReferenceTime;       //used for order history
+
+
+#define ZONE_SUPPORT 1
+#define ZONE_RESIST  2
+
+#define ZONE_WEAK      0
+#define ZONE_TURNCOAT  1
+#define ZONE_UNTESTED  2
+#define ZONE_VERIFIED  3
+#define ZONE_PROVEN    4
 
 //+------------------------------------------------------------------+
 //| End of Setup                                          
@@ -220,7 +234,8 @@ int init()
    if(UseHiddenVolTrailing) ArrayResize(HiddenVolTrailingList,MaxPositionsAllowed,0);
 
    PaInit();
-   sr = new CSupportResistance(SRmarginPips, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
+   if(UseSupportResistance)
+    sr = new CSupportResistance(SRmarginPips, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
 
    start();
    return(0);
@@ -235,7 +250,8 @@ int deinit()
   {
 //----
     PaDeinit(); // Deinitialize ZigZag indicator
-    delete sr;
+    if(UseSupportResistance)
+      delete sr;
 //----
    return(0);
   }
@@ -268,7 +284,8 @@ int start()
 //----------Entry & Exit Variables-----------
 
    PaResults paState = PaProcessBars(1);
-   sr.SRUpdate(0); // Update for current bar
+   if(UseSupportResistance)
+    sr.SRUpdate(0); // Update for current bar
 
    Trigger = 0;
    
@@ -333,10 +350,52 @@ int start()
       }
    }
 
-    
-    //----------PipFinite Entry Rules-----------
-    //must be last decision to avoid other rules to override it
-    double pipFiniteLine = EMPTY_VALUE;
+   if(UseSupplyDemand)
+   {
+      double ner_hi_zone_P1 = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
+      double ner_hi_zone_P2 = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 5, 0); // Get Supply Zone Low
+      double ner_lo_zone_P1 = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 6, 0); // Get Demand Zone High
+      double ner_lo_zone_P2 = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 7, 0); // Get Demand Zone Low
+      int ner_hi_zone_strength = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 8, 0); // Get Supply Zone Strength
+      int ner_lo_zone_strength = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 9, 0); // Get Demand Zone Strength
+      int ner_price_inside_zone = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 10, 0); // Get Supply Zone Type
+
+      // Print("Supply Zone High: ", ner_hi_zone_P1, " Low: ", ner_hi_zone_P2, " Strength: ", ner_hi_zone_strength, " inside zone: ", ner_price_inside_zone);
+      // Print("Demand Zone High: ", ner_lo_zone_P1, " Low: ", ner_lo_zone_P2, " Strength: ", ner_lo_zone_strength, " inside zone: ", ner_price_inside_zone);
+
+      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ner_lo_zone_strength >= ZONE_VERIFIED && ((Close[1] < ner_lo_zone_P2 + supplyDemandMarginPips * (P*Point))))
+      { 
+        Trigger = 2;
+        if(OnJournaling) Print("Exit Signal - SELL below support or resistance line");
+      }
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ner_hi_zone_strength >= ZONE_VERIFIED && (Close[1] > ner_hi_zone_P1 - supplyDemandMarginPips * (P*Point)))
+      {
+          Trigger = 1;
+          if(OnJournaling) Print("Exit Signal - BUY above support or resistance line");
+      } 
+      else
+      { //if there are no open position, check for entry signal
+        if(ner_hi_zone_strength >= ZONE_VERIFIED && ((Close[1] > ner_hi_zone_P1 && Close[2] < ner_hi_zone_P1) || 
+           (Close[1] > ner_hi_zone_P2 && Close[2] < ner_hi_zone_P2)))
+        {
+          BreakoutTriggered = true; // set breakout flag
+          Trigger = 1;
+          if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
+        }
+        else if(ner_lo_zone_strength >= ZONE_VERIFIED && ((Close[1] < ner_lo_zone_P2 && Close[2] > ner_lo_zone_P2) ||
+                (Close[1] < ner_lo_zone_P1 && Close[2] > ner_lo_zone_P1)))
+        {
+          BreakoutTriggered = true; // set breakout flag
+          Trigger = 2;
+          if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
+        
+        } 
+      }
+   }
+
+   //----------PipFinite Entry Rules-----------
+   //must be last decision to avoid other rules to override it
+   double pipFiniteLine = EMPTY_VALUE;
    if(UsePipFiniteEntry)
     {
       // Get PipFinite indicator values with proper parameters
