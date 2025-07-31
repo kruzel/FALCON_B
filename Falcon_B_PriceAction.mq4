@@ -40,7 +40,7 @@ extern bool    OnJournaling                     = True; // Add EA updates in the
 extern string  Header3="----------Position Sizing Settings-----------";
 extern string  Lot_explanation                  = "If IsSizingOn = true, Lots variable will be ignored";
 extern double  Lots                             = 0.01;
-extern bool    IsSizingOn                       = False;
+extern bool    IsSizingOn                       = True;
 extern double  Risk                             = 1; // Risk per trade (%)
 extern int     MaxPositionsAllowed              = 1;
 extern double  MaxSpread                        = 5; // Maximum spread (Pips)
@@ -113,7 +113,7 @@ extern int     ATRTimeframe                     = 60; // In minutes
 extern int     ATRPeriod                        = 14;
 
 extern string  Header15="----------PipFinite rules Variables-----------";
-extern bool    UsePipFiniteEntry                = True;
+extern bool    UsePipFiniteEntry                = True;    // Use PipFinite Trend PRO
 extern int     PipFinite_Period                 = 3;       // PipFinite Trend PRO Period
 extern double  PipFinite_TargetFactor           = 2.0;     // PipFinite Trend PRO Target Factor
 extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PRO Maximum History Bars
@@ -305,7 +305,7 @@ int start()
 
    if(CountPosOrders(MagicNumber,-1) == 0)
     {
-        if(paState.prevTrendState == UP_TREND_RETRACEMENT && paState.trendState == UP_TREND)
+        if(paState.trendState == UP_TREND)
         {
             PriceActionState peaksState = GetPrevPeaks();
             if(Close[1] > peaksState.peakClose2)
@@ -314,7 +314,7 @@ int start()
               if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after retracement");
             }
         }
-        else if(paState.prevTrendState == DOWN_TREND_RETRACEMENT && paState.trendState == DOWN_TREND)
+        else if(paState.trendState == DOWN_TREND)
         {
             PriceActionState peaksState = GetPrevPeaks();
             if(Close[1] < peaksState.peakClose2)
@@ -441,12 +441,13 @@ int start()
 //----------TP, SL, Breakeven and Trailing Stops Variables-----------
 
    myATR=iATR(NULL,Period(),atr_period,1);
+   double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); 
    
    if(SlTpbyLastBar) 
     {
       if(Trigger==1) // Buy
         {
-          Stop=(Ask - MathMin(Low[1],High[1]))/(P*Point); // Stop Loss in Pips
+          Stop=(Ask - MathMin(Low[1],High[1]))/(P*Point) + 2*currentSpread; // Stop Loss in Pips
           if(Stop<MinStopLossATR) // If the last bar is a Doji
           {
             Stop=myATR/(P*Point); 
@@ -467,29 +468,33 @@ int start()
          Take=Stop*TpSlRatio;
         }
     } 
-    else 
-    { // Use Fixed Stop Loss
-      if(UseFixedStopLoss==True) 
-      {
-        if(Trigger==1) // Buy
-          Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
-        else if(Trigger==2) // Sell
-          Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
-      }  
-      else 
-      {
-        Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,P);
-      }
 
-      if(UseFixedTakeProfit==True) 
-      {
-        if(Trigger==1) // Buy
-          Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
-        else if(Trigger==2) // Sell
-          Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
-      }  else {
-        Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,P);
-      }
+    if(UseFixedStopLoss==True) 
+    {
+      if(Trigger==1) // Buy
+        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
+      else if(Trigger==2) // Sell
+        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
+    }  
+    else 
+    {
+      Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,P);
+    }
+
+    if(UseFixedTakeProfit==True) 
+    {
+      if(Trigger==1) // Buy
+        Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
+      else if(Trigger==2) // Sell
+        Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
+    }  else {
+      Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,P);
+    }
+
+    if(IsSizingOn==True)
+    {
+      Stop = 1;
+      Take = 1;
     }
 
    if(UseBreakevenStops) BreakevenStopAll(OnJournaling,RetryInterval,BreakevenBuffer,MagicNumber,P);
@@ -563,15 +568,14 @@ int start()
         return (0); // Exit without opening new trades
       }
 
-   double currentSpread = MarketInfo(Symbol(), MODE_SPREAD) / P; //points
   //  Print("Current spread= ", currentSpread, " pips. Max allowed: ", MaxSpread, " pips", " P=", P, " Point=", Point);
-   if( currentSpread >= MaxSpread )
+   if( currentSpread / P >= MaxSpread )
      {
-      if(OnJournaling) Print("Current spread is too high: ", currentSpread, " pips. Max allowed: ", MaxSpread, " pips");
+      if(OnJournaling) Print("Current spread is too high: ", currentSpread / P, " pips. Max allowed: ", MaxSpread, " pips");
       return (0); // Exit if spread is too high
      }
 
-    // if(OnJournaling) Print("Stop=", Stop, " Take=", Take);;
+    if(OnJournaling) Print("Stop=", Stop, " Take=", Take);;
 
    if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger))==False) 
       if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
@@ -747,6 +751,8 @@ double GetLot(bool IsSizingOnTrigger,double FixedLots,double RiskPerTrade,int Ye
 
    if(IsSizingOnTrigger==true) 
      {
+      Print("Lot size=",MarketInfo(Symbol(),MODE_LOTSIZE), " TickValue=",MarketInfo(Symbol(),MODE_TICKVALUE), " Point=",Point, " AccountBalance=",AccountBalance(), " RiskPerTrade=",RiskPerTrade, " STOP=",STOP, " K=",K, " YenAdjustment=",YenAdjustment);
+
       output=RiskPerTrade*0.01*AccountBalance()/(MarketInfo(Symbol(),MODE_LOTSIZE)*MarketInfo(Symbol(),MODE_TICKVALUE)*STOP*K*Point); // Sizing Algo based on account size
       output=output*YenAdjustment; // Adjust for Yen Pairs
         } else {
@@ -2384,7 +2390,7 @@ void VisualizeSignalOverlay(int i, int signal)
    static int signalsCountr = 0;
    string txt = "";
    color col = clrBlack;
-   double y_offset = 0.1 * P * Point; // Small offset above/below close
+   double y_offset = 100 * Point; // Small offset above/below close
    double y = 0;
 
    double maxVal = MathMax(Low[i], High[i]);
