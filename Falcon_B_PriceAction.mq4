@@ -100,7 +100,7 @@ extern double  VolTrailingDistMultiplier_Hidden = 0; // In units of ATR
 extern double  VolTrailingBuffMultiplier_Hidden = 0; // In units of ATR
 
 extern string  Header12="----------Volatility Measurement Settings-----------";
-extern int     atr_period                       = 14;
+extern int     atr_period                       = 5; // ATR period for volatility measurement
 
 extern string  Header13="----------Set Max Loss Limit-----------";
 extern bool    IsLossLimitActivated             = False;
@@ -307,13 +307,21 @@ int start()
     {
         if(paState.prevTrendState == UP_TREND_RETRACEMENT && paState.trendState == UP_TREND)
         {
-            Trigger = 1; // Buy signal
-            if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after retracement");
+            PriceActionState peaksState = GetPrevPeaks();
+            if(Close[1] > peaksState.peakClose2)
+            {
+              Trigger = 1; // Buy signal
+              if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after retracement");
+            }
         }
         else if(paState.prevTrendState == DOWN_TREND_RETRACEMENT && paState.trendState == DOWN_TREND)
         {
-            Trigger = 2; // Sell signal
-            if(OnJournaling) Print("Entry Signal - SELL on DOWN_TREND after retracement");
+            PriceActionState peaksState = GetPrevPeaks();
+            if(Close[1] < peaksState.peakClose2)
+            {
+              Trigger = 2; // Sell signal
+              if(OnJournaling) Print("Entry Signal - SELL on DOWN_TREND after retracement");
+            }
         }
     }
       
@@ -438,7 +446,7 @@ int start()
     {
       if(Trigger==1) // Buy
         {
-          Stop=(Ask - MathMin(Close[1],Open[1]))/(P*Point); // Stop Loss in Pips
+          Stop=(Ask - MathMin(Low[1],High[1]))/(P*Point); // Stop Loss in Pips
           if(Stop<MinStopLossATR) // If the last bar is a Doji
           {
             Stop=myATR/(P*Point); 
@@ -449,7 +457,7 @@ int start()
         } 
         else if(Trigger==2) 
         { // Sell
-          Stop=(MathMax(Close[1],Open[1])-Bid)/(P*Point); // Stop Loss in Pips
+          Stop=(MathMax(Low[1],High[1])-Bid)/(P*Point); // Stop Loss in Pips
           if(Stop<MinStopLossATR) // If the last bar is a Doji
           {
             Stop=myATR/(P*Point); 
@@ -548,7 +556,7 @@ int start()
       }
     }
 
-    if(GetConsecutiveFailureCount(MagicNumber) > MaxConsecutiveFailures && !BreakoutTriggered)
+    if(GetConsecutiveFailureCount(MagicNumber) >= MaxConsecutiveFailures && paState.trendState != UP_TREND && paState.trendState != DOWN_TREND && !BreakoutTriggered)
     {
         Trigger = 0; // Reset trigger to no signal
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
