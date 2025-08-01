@@ -345,13 +345,13 @@ int start()
         int SRCrossTriggered = sr.CheckSRCrossed(Close[2], Close[1]); 
         if(SRCrossTriggered == 1)
         {
-          // BreakoutTriggered = true; // set breakout flag
+          BreakoutTriggered = true; // set breakout flag
           Trigger = 1;
           if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
         }
         else if(SRCrossTriggered == 2)
         {
-          // BreakoutTriggered = true; // set breakout flag
+          BreakoutTriggered = true; // set breakout flag
           Trigger = 2;
           if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
         
