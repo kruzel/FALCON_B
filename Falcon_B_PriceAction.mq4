@@ -50,12 +50,12 @@ extern bool    SlTpbyLastBar                    = True; // Use the last bar's hi
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
 extern double  MinStopLossATR                     = 5; // Minimum Stop Loss in Pips or ATR
 
-extern bool    UseFixedStopLoss                 = False; // If this is false and IsSizingOn = True, sizing algo will not be able to calculate correct lot size. 
+extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
 extern bool    IsVolatilityStopOn               = False;
 extern double  VolBasedSLMultiplier             = 3; // Stop Loss Amount in units of Volatility
 
-extern bool    UseFixedTakeProfit               = False;
+extern bool    UseFixedTakeProfit               = False; // Fixed size take profit
 extern double  FixedTakeProfit                  = 0; // Hard Take Profit in Pips. Will be overridden if vol-based TP is true 
 extern bool    IsVolatilityTakeProfitOn         = False;
 extern double  VolBasedTPMultiplier             = 6; // Take Profit Amount in units of Volatility
@@ -105,6 +105,8 @@ extern int     atr_period                       = 5; // ATR period for volatilit
 extern string  Header13="----------Set Max Loss Limit-----------";
 extern bool    IsLossLimitActivated             = False;
 extern double  LossLimitPercent                 = 50;
+extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
+extern int     BreakoutMargin                   = 1; // Margin in Pips to consider breakout
 
 extern string  Header14="----------Set Max Volatility Limit-----------";
 extern bool    IsVolLimitActivated              = False;
@@ -132,7 +134,7 @@ extern bool    UseSupplyDemand                  = True;     // Use Supply and De
 extern int     supplyDemandMarginPips            = 10;       // Supply and Demand threshold in Pips
 
 extern string  Header18="----------Trend rules Variables-----------";
-extern bool    UseReversal                        = True;     // Use ZigZag Indicator
+extern bool    UseReversal                        = True;     // Use Reversal Indicator
 
 extern string  Header19="----------Trading time Variables-----------";
 extern int     TradingStartHour                   = 0;        // Start hour for trading (0-23)
@@ -162,7 +164,6 @@ CSupportResistance* sr;
 int Trigger;
 int SRTriggered;
 
-int MaxConsecutiveFailures = 3; // Maximum allowed consecutive failures
 bool BreakoutTriggered = false; // Flag for breakout condition
 
 int OrderNumber;
@@ -383,15 +384,17 @@ int start()
       } 
       else
       { //if there are no open position, check for entry signal
-        if(ner_hi_zone_strength >= ZONE_VERIFIED && ((Close[1] > ner_hi_zone_P1 && Close[2] < ner_hi_zone_P1) || 
-           (Close[1] > ner_hi_zone_P2 && Close[2] < ner_hi_zone_P2)))
+        if(ner_hi_zone_strength >= ZONE_VERIFIED &&
+          ((Close[1] > ner_hi_zone_P1 + BreakoutMargin*P*Point && Close[2] < ner_hi_zone_P1) ||
+           (Close[1] > ner_hi_zone_P2 + BreakoutMargin*P*Point && Close[2] < ner_hi_zone_P2)))
         {
           BreakoutTriggered = true; // set breakout flag
           Trigger = 1;
           if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
         }
-        else if(ner_lo_zone_strength >= ZONE_VERIFIED && ((Close[1] < ner_lo_zone_P2 && Close[2] > ner_lo_zone_P2) ||
-                (Close[1] < ner_lo_zone_P1 && Close[2] > ner_lo_zone_P1)))
+        else if(ner_lo_zone_strength >= ZONE_VERIFIED &&
+           ((Close[1] < ner_lo_zone_P2 - BreakoutMargin*P*Point && Close[2] > ner_lo_zone_P2) ||
+           (Close[1] < ner_lo_zone_P1 - BreakoutMargin*P*Point && Close[2] > ner_lo_zone_P1)))
         {
           BreakoutTriggered = true; // set breakout flag
           Trigger = 2;
@@ -443,7 +446,14 @@ int start()
    myATR=iATR(NULL,Period(),atr_period,1);
    double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); 
    
-   if(SlTpbyLastBar) 
+    if(UseFixedStopLoss==True) 
+    {
+      if(Trigger==1) // Buy
+        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
+      else if(Trigger==2) // Sell
+        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
+    }  
+    else if(SlTpbyLastBar==True) 
     {
       if(Trigger==1) // Buy
         {
@@ -453,8 +463,6 @@ int start()
             Stop=myATR/(P*Point); 
             Print("Doji detected, using ATR for Stop Loss: ", Stop);
           }
-            
-          Take=Stop*TpSlRatio;
         } 
         else if(Trigger==2) 
         { // Sell
@@ -464,19 +472,8 @@ int start()
             Stop=myATR/(P*Point); 
             Print("Doji detected, using ATR for Stop Loss: ", Stop);
           }
-          
-         Take=Stop*TpSlRatio;
         }
-    } 
-
-    if(UseFixedStopLoss==True) 
-    {
-      if(Trigger==1) // Buy
-        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
-      else if(Trigger==2) // Sell
-        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
-    }  
-    else 
+    } else
     {
       Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,P);
     }
@@ -487,14 +484,14 @@ int start()
         Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
       else if(Trigger==2) // Sell
         Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
-    }  else {
-      Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,P);
-    }
-
-    if(IsSizingOn==True)
+    }  
+    else if(SlTpbyLastBar==True) 
     {
-      Stop = 1;
-      Take = 1;
+       Take=Stop*TpSlRatio;
+    }
+    else 
+    {
+      Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,P);
     }
 
    if(UseBreakevenStops) BreakevenStopAll(OnJournaling,RetryInterval,BreakevenBuffer,MagicNumber,P);
@@ -521,7 +518,6 @@ int start()
    }
 
 //----------Exit Rules (All Opened Positions)-----------
-
    // TDL 2: Setting up Exit rules. Modify the ExitSignal() function to suit your needs.
 
    if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(Trigger)==2)
@@ -575,7 +571,11 @@ int start()
       return (0); // Exit if spread is too high
      }
 
-    if(OnJournaling) Print("Stop=", Stop, " Take=", Take);;
+    if(Trigger != 0 && Stop==0)
+    {
+      Print("Stop Loss is zero, cannot calculate position size");
+      return (0); // Exit if Stop Loss is zero
+    }
 
    if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger))==False) 
       if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
@@ -751,10 +751,11 @@ double GetLot(bool IsSizingOnTrigger,double FixedLots,double RiskPerTrade,int Ye
 
    if(IsSizingOnTrigger==true) 
      {
-      Print("Lot size=",MarketInfo(Symbol(),MODE_LOTSIZE), " TickValue=",MarketInfo(Symbol(),MODE_TICKVALUE), " Point=",Point, " AccountBalance=",AccountBalance(), " RiskPerTrade=",RiskPerTrade, " STOP=",STOP, " K=",K, " YenAdjustment=",YenAdjustment);
-
       output=RiskPerTrade*0.01*AccountBalance()/(MarketInfo(Symbol(),MODE_LOTSIZE)*MarketInfo(Symbol(),MODE_TICKVALUE)*STOP*K*Point); // Sizing Algo based on account size
+      // output = (RiskPerTrade * 0.01 * AccountBalance()) / (STOP * MarketInfo(Symbol(), MODE_TICKVALUE));
       output=output*YenAdjustment; // Adjust for Yen Pairs
+
+      Print("Lot size=",MarketInfo(Symbol(),MODE_LOTSIZE), " TickValue=",MarketInfo(Symbol(),MODE_TICKVALUE), " Point=",Point, " AccountBalance=",AccountBalance(), " RiskPerTrade=",RiskPerTrade, " STOP=",STOP, " K=",K, " YenAdjustment=",YenAdjustment, " output=",output);
         } else {
       output=FixedLots;
      }
