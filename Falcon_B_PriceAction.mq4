@@ -3,14 +3,14 @@
 //|                                        Copyright 2015,Lucas Liew 
 //|                                  lucas@blackalgotechnologies.com 
 //+------------------------------------------------------------------+
-#include <Falcon_B/01_GetHistoryOrder.mqh>
-#include <Falcon_B/02_OrderProfitToCSV.mqh>
-#include <Falcon_B/03_ReadCommandFromCSV.mqh>
-#include <Falcon_B/08_TerminalNumber.mqh>
-#include <Falcon_B/10_isNewBar.mqh>
-#include <Falcon_B/enums.mqh>
-#include <Falcon_B/PriceActionStates.mqh>
-#include <Falcon_B/SupportResistance.mqh>
+#include <Falcon_B_Include/01_GetHistoryOrder.mqh>
+#include <Falcon_B_Include/02_OrderProfitToCSV.mqh>
+#include <Falcon_B_Include/03_ReadCommandFromCSV.mqh>
+#include <Falcon_B_Include/08_TerminalNumber.mqh>
+#include <Falcon_B_Include/10_isNewBar.mqh>
+#include <Falcon_B_Include/enums.mqh>
+#include <Falcon_B_Include/PriceActionStates.mqh>
+#include <Falcon_B_Include/SupportResistance.mqh>
 
 
 #property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
@@ -166,7 +166,14 @@ CSupportResistance* sr;
 int Trigger;
 int SRTriggered;
 
-bool BreakoutTriggered = false; // Flag for breakout condition
+enum BreakoutStates
+{
+  BO_NORMAL = 0,
+  BO_WAITING = 1,
+  BO_TRIGGERED = 2
+};
+
+BreakoutStates BreakoutState = BO_NORMAL; // Flag for breakout condition
 
 int OrderNumber;
 double HiddenSLList[][2]; // First dimension is for position ticket numbers, second is for the SL Levels
@@ -312,9 +319,9 @@ int start()
         if(paState.trendState == UP_TREND)
         {
             PriceActionState peaksState = GetPrevPeaks();
-            if(Close[1] > peaksState.peakClose2 + BreakoutMarginPips*PipFactor*Point)
+            if(Close[1] > peaksState.peakClose2 + BreakoutMarginPips*PipFactor*Point && peaksState.peakState2==HIGHER_HIGH_PEAK)
             {
-              BreakoutTriggered = true; // set breakout flag
+              // BreakoutState = BO_TRIGGERED; // set breakout flag
               Trigger = 1; // Buy signal
               if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after retracement if price above prev peak");
             }
@@ -322,9 +329,9 @@ int start()
         else if(paState.trendState == DOWN_TREND)
         {
             PriceActionState peaksState = GetPrevPeaks();
-            if(Close[1] < peaksState.peakClose2 - + BreakoutMarginPips*PipFactor*Point)
+            if(Close[1] < peaksState.peakClose2 - + BreakoutMarginPips*PipFactor*Point && peaksState.peakState2==LOWER_LOW_PEAK)
             {
-              BreakoutTriggered = true; // set breakout flag
+              // BreakoutState = BO_TRIGGERED; // set breakout flag
               Trigger = 2; // Sell signal
               if(OnJournaling) Print("Entry Signal - SELL on DOWN_TREND after retracement  if price below prev peak");
             }
@@ -350,13 +357,13 @@ int start()
         int SRCrossTriggered = sr.CheckSRCrossed(Close[2], Close[1]); 
         if(SRCrossTriggered == 1)
         {
-          BreakoutTriggered = true; // set breakout flag
+          BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 1;
           if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
         }
         else if(SRCrossTriggered == 2)
         {
-          BreakoutTriggered = true; // set breakout flag
+          BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 2;
           if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
         
@@ -366,13 +373,13 @@ int start()
 
    if(UseSupplyDemand)
    {
-      double ner_hi_zone_P1 = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
-      double ner_hi_zone_P2 = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 5, 0); // Get Supply Zone Low
-      double ner_lo_zone_P1 = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 6, 0); // Get Demand Zone High
-      double ner_lo_zone_P2 = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 7, 0); // Get Demand Zone Low
-      int ner_hi_zone_strength = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 8, 0); // Get Supply Zone Strength
-      int ner_lo_zone_strength = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 9, 0); // Get Demand Zone Strength
-      int ner_price_inside_zone = iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 10, 0); // Get Supply Zone Type
+      double ner_hi_zone_P1 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
+      double ner_hi_zone_P2 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 5, 0); // Get Supply Zone Low
+      double ner_lo_zone_P1 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 6, 0); // Get Demand Zone High
+      double ner_lo_zone_P2 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 7, 0); // Get Demand Zone Low
+      int ner_hi_zone_strength = (int)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 8, 0); // Get Supply Zone Strength
+      int ner_lo_zone_strength = (int)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 9, 0); // Get Demand Zone Strength
+      int ner_price_inside_zone = (int)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 10, 0); // Get Supply Zone Type
 
       // Print("Supply Zone High: ", ner_hi_zone_P1, " Low: ", ner_hi_zone_P2, " Strength: ", ner_hi_zone_strength, " inside zone: ", ner_price_inside_zone);
       // Print("Demand Zone High: ", ner_lo_zone_P1, " Low: ", ner_lo_zone_P2, " Strength: ", ner_lo_zone_strength, " inside zone: ", ner_price_inside_zone);
@@ -393,7 +400,7 @@ int start()
           ((Close[1] > ner_hi_zone_P1 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P1) ||
            (Close[1] > ner_hi_zone_P2 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P2)))
         {
-          BreakoutTriggered = true; // set breakout flag
+          // BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 1;
           if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
         }
@@ -401,7 +408,7 @@ int start()
            ((Close[1] < ner_lo_zone_P2 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P2) ||
            (Close[1] < ner_lo_zone_P1 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P1)))
         {
-          BreakoutTriggered = true; // set breakout flag
+          // BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 2;
           if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
         
@@ -412,7 +419,7 @@ int start()
    //----------PipFinite Entry Rules-----------
    //must be last decision to avoid other rules to override it
    double pipFiniteLine = EMPTY_VALUE;
-   if(UsePipFiniteEntry)
+   if(UsePipFiniteEntry && BreakoutState == BO_NORMAL)
     {
       // Get PipFinite indicator values with proper parameters
       PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
@@ -428,7 +435,7 @@ int start()
       
       if (pipFiniteLine != EMPTY_VALUE)
       {
-        if(Trigger == 0 && !BreakoutTriggered) // don't use pip finite trigger if waiting for breakout
+        if(Trigger == 0) // don't use pip finite trigger if waiting for breakout
         {
           int CrossTriggeredPF = Crossed(Close[2], Close[1], pipFiniteLine); // Check if crossed the PipFinite line
           if(CrossTriggeredPF == 1) // Buy signal after retracement
@@ -561,8 +568,9 @@ int start()
       }
     }
 
-    if(GetConsecutiveFailureCount(MagicNumber) >= MaxConsecutiveFailures && paState.trendState != UP_TREND && paState.trendState != DOWN_TREND && !BreakoutTriggered)
+    if(GetConsecutiveFailureCount(MagicNumber) >= MaxConsecutiveFailures && !BreakoutState==BO_TRIGGERED)
     {
+        BreakoutState = BO_WAITING;
         Trigger = 0; // Reset trigger to no signal
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
         return (0); // Exit without opening new trades
@@ -587,7 +595,7 @@ int start()
            {
             if(TradeAllowed && EntrySignal(Trigger)==1)
               { // Open Long Positions
-                BreakoutTriggered = false; // Reset breakout flag
+                BreakoutState = BO_NORMAL; // Reset breakout flag
                VisualizeSignalOverlay(1, Trigger);
 
                OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,Stop,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
@@ -608,7 +616,7 @@ int start()
    
             if(TradeAllowed && EntrySignal(Trigger)==2)
               { // Open Short Positions
-                BreakoutTriggered = false; // Reset breakout flag
+                BreakoutState = BO_NORMAL; // Reset breakout flag
                VisualizeSignalOverlay(1, Trigger);
 
                OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,Stop,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
