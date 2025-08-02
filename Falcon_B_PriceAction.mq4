@@ -319,9 +319,9 @@ int start()
         if(paState.trendState == UP_TREND)
         {
             PriceActionState peaksState = GetPrevPeaks();
-            if(Close[1] > peaksState.peakClose2 + BreakoutMarginPips*PipFactor*Point && peaksState.peakState2==HIGHER_HIGH_PEAK)
+            if(Close[1] > peaksState.peakClose2 + BreakoutMarginPips*PipFactor*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
             {
-              // BreakoutState = BO_TRIGGERED; // set breakout flag
+              BreakoutState = BO_TRIGGERED; // set breakout flag
               Trigger = 1; // Buy signal
               if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after retracement if price above prev peak");
             }
@@ -329,9 +329,9 @@ int start()
         else if(paState.trendState == DOWN_TREND)
         {
             PriceActionState peaksState = GetPrevPeaks();
-            if(Close[1] < peaksState.peakClose2 - + BreakoutMarginPips*PipFactor*Point && peaksState.peakState2==LOWER_LOW_PEAK)
+            if(Close[1] < peaksState.peakClose2 - BreakoutMarginPips*PipFactor*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
             {
-              // BreakoutState = BO_TRIGGERED; // set breakout flag
+              BreakoutState = BO_TRIGGERED; // set breakout flag
               Trigger = 2; // Sell signal
               if(OnJournaling) Print("Entry Signal - SELL on DOWN_TREND after retracement  if price below prev peak");
             }
@@ -357,13 +357,13 @@ int start()
         int SRCrossTriggered = sr.CheckSRCrossed(Close[2], Close[1]); 
         if(SRCrossTriggered == 1)
         {
-          BreakoutState = BO_TRIGGERED; // set breakout flag
+          // BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 1;
           if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
         }
         else if(SRCrossTriggered == 2)
         {
-          BreakoutState = BO_TRIGGERED; // set breakout flag
+          // BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 2;
           if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
         
@@ -419,7 +419,7 @@ int start()
    //----------PipFinite Entry Rules-----------
    //must be last decision to avoid other rules to override it
    double pipFiniteLine = EMPTY_VALUE;
-   if(UsePipFiniteEntry && BreakoutState == BO_NORMAL)
+   if(UsePipFiniteEntry)
     {
       // Get PipFinite indicator values with proper parameters
       PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
@@ -542,6 +542,24 @@ int start()
      }
 
 //----------Entry Rules (Market and Pending) -----------
+    if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
+    {
+      datetime localTime = TimeLocal();
+      if(TimeHour(localTime) < TradingStartHour || (TimeHour(localTime) == TradingStartHour && TimeMinute(localTime) < TradingStartMinute) || TimeHour(localTime) > TradingEndHour || (TimeHour(localTime) == TradingEndHour && TimeMinute(localTime) > TradingEndMinute))
+      {
+        if(OnJournaling) Print("waiting for valid trading time: ", TimeHour(localTime), ":", TimeMinute(localTime));
+        return (0);
+      }
+    }
+
+    if(GetConsecutiveFailureCount(MagicNumber) >= MaxConsecutiveFailures && BreakoutState!=BO_TRIGGERED)
+    {
+        BreakoutState = BO_WAITING;
+        Trigger = 0; // Reset trigger to no signal
+        if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
+        return (0); // Exit without opening new trades
+      }
+
     if(UsePipFiniteEntry)
     {
       if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
@@ -557,24 +575,6 @@ int start()
         return (0); // Exit if no valid signal
       }
     }
-
-    if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
-    {
-      datetime localTime = TimeLocal();
-      if(TimeHour(localTime) < TradingStartHour || (TimeHour(localTime) == TradingStartHour && TimeMinute(localTime) < TradingStartMinute) || TimeHour(localTime) > TradingEndHour || (TimeHour(localTime) == TradingEndHour && TimeMinute(localTime) > TradingEndMinute))
-      {
-        if(OnJournaling) Print("waiting for valid trading time: ", TimeHour(localTime), ":", TimeMinute(localTime));
-        return (0);
-      }
-    }
-
-    if(GetConsecutiveFailureCount(MagicNumber) >= MaxConsecutiveFailures && !BreakoutState==BO_TRIGGERED)
-    {
-        BreakoutState = BO_WAITING;
-        Trigger = 0; // Reset trigger to no signal
-        if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
-        return (0); // Exit without opening new trades
-      }
 
   //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", Point);
    if( currentSpread * PipFactor >= MaxSpread )
