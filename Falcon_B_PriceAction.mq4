@@ -11,6 +11,7 @@
 #include <Falcon_B_Include/enums.mqh>
 #include <Falcon_B_Include/PriceActionStates.mqh>
 #include <Falcon_B_Include/SupportResistance.mqh>
+#include <Falcon_B_Include/PinBarDetector.mqh>
 
 
 #property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
@@ -38,19 +39,18 @@ extern bool    IsECNbroker                      = False; // Is your broker an EC
 extern bool    OnJournaling                     = True; // Add EA updates in the Journal Tab
 
 extern string  Header3="----------Position Sizing Settings-----------";
-extern string  Lot_explanation                  = "If IsSizingOn = true, Lots variable will be ignored";
-extern double  Lots                             = 0.01;
-extern bool    IsSizingOn                       = True;
+extern double  Lots                             = 0.01; 
+extern bool    IsSizingOn                       = True; // Risk based sizing, ignore fixed lots
 extern double  Risk                             = 1; // Risk per trade (%)
 extern int     MaxPositionsAllowed              = 1;
-extern double  MaxSpread                        = 5; // Maximum spread (Pips)
+extern double  MaxSpread                        = 50; // Maximum spread (Pips)
 extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
 
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
 extern double  MinStopLossATR                   = 5; // Minimum Stop Loss in Pips or ATR
-extern double  StopBarMargin                    = 1; // stop loss margin below / above prev bar
+extern double  StopBarMargin                    = 10; // stop loss margin % of stop size
 
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
@@ -136,7 +136,7 @@ extern bool    UseSupplyDemand                  = True;     // Use Supply and De
 extern int     supplyDemandMarginPips            = 10;       // Supply and Demand threshold in Pips
 
 extern string  Header18="----------Trend rules Variables-----------";
-extern bool    UseReversal                        = True;     // Use Reversal Indicator
+extern bool    UseReversal                        = True;     // Use Reversal 
 
 extern string  Header19="----------Trading time Variables-----------";
 extern int     TradingStartHour                   = 0;        // Start hour for trading (0-23)
@@ -300,43 +300,68 @@ int start()
 
    Trigger = 0;
    
+   if(CountPosOrders(MagicNumber,-1) == 0)
+    {
+      // check continuation after retracement
+      if(paState.prevTrendState == UP_TREND_RETRACEMENT && paState.trendState == UP_TREND && BreakoutState!=BO_WAITING)
+      {
+          Trigger = 1; // Buy signal
+          if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after UP retracement");
+      }
+      else if(paState.prevTrendState == DOWN_TREND_RETRACEMENT && paState.trendState == DOWN_TREND && BreakoutState!=BO_WAITING)
+      {
+          Trigger = 2; // Sell signal
+            if(OnJournaling) Print("Entry Signal - SELL on DOWN_TREND after DOWN retracement");
+      }
+      else if(paState.prevTrendState == DOWN_TREND_RETRACEMENT && paState.trendState == UP_TREND && BreakoutState!=BO_WAITING)
+      {
+          Trigger = 1; // Buy signal
+          if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after DOWN retracement (reversal)");
+      }
+      else if(paState.prevTrendState == UP_TREND_RETRACEMENT && paState.trendState == DOWN_TREND && BreakoutState!=BO_WAITING)
+      {
+          Trigger = 2; // Sell signal
+            if(OnJournaling) Print("Entry Signal - SELL on DOWN_TREND after UP retracement (reversal)");
+      }
+
+      //check breakout
+      if(paState.trendState == UP_TREND && BreakoutState == BO_WAITING)
+      {
+          if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPips*PipFactor*Point);
+          PriceActionState peaksState = GetPrevPeaks();
+          if(Close[1] > peaksState.peakClose2 + BreakoutMarginPips*PipFactor*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
+          {
+            BreakoutState = BO_TRIGGERED; // set breakout flag
+            Trigger = 1; // Buy signal
+            if(OnJournaling) Print("Entry Signal - BUY on breakout");
+          }
+      }
+      else if(paState.trendState == DOWN_TREND && BreakoutState == BO_WAITING)
+      {
+          if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPips*PipFactor*Point);
+          PriceActionState peaksState = GetPrevPeaks();
+          if(Close[1] < peaksState.peakClose2 - BreakoutMarginPips*PipFactor*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
+          {
+            BreakoutState = BO_TRIGGERED; // set breakout flag
+            Trigger = 2; // Sell signal
+            if(OnJournaling) Print("Entry Signal - SELL on breakout");
+          }
+      }
+    }
+
    if(UseReversal)
    {
-      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && paState.trendState == DOWN_TREND)
+      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (paState.trendState == DOWN_TREND || paState.trendState == UP_TREND_RETRACEMENT || IsBearishPinBar(1)))
       {
          Trigger = 2; // Sell signal
          if(OnJournaling) Print("Exit Signal - SELL on reversal to DOWN_TREND");
       }
-      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && paState.trendState == UP_TREND)
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (paState.trendState == UP_TREND || paState.trendState == DOWN_TREND_RETRACEMENT || IsBearishPinBar(1)))
       {
          Trigger = 1; // Buy signal
          if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND");
       }
    } 
-
-   if(CountPosOrders(MagicNumber,-1) == 0)
-    {
-        if(paState.trendState == UP_TREND)
-        {
-            PriceActionState peaksState = GetPrevPeaks();
-            if(Close[1] > peaksState.peakClose2 + BreakoutMarginPips*PipFactor*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
-            {
-              BreakoutState = BO_TRIGGERED; // set breakout flag
-              Trigger = 1; // Buy signal
-              if(OnJournaling) Print("Entry Signal - BUY on UP_TREND after retracement if price above prev peak");
-            }
-        }
-        else if(paState.trendState == DOWN_TREND)
-        {
-            PriceActionState peaksState = GetPrevPeaks();
-            if(Close[1] < peaksState.peakClose2 - BreakoutMarginPips*PipFactor*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
-            {
-              BreakoutState = BO_TRIGGERED; // set breakout flag
-              Trigger = 2; // Sell signal
-              if(OnJournaling) Print("Entry Signal - SELL on DOWN_TREND after retracement  if price below prev peak");
-            }
-        }
-    }
       
    // support resistance exit rules
    if(UseSupportResistance)
@@ -384,15 +409,15 @@ int start()
       // Print("Supply Zone High: ", ner_hi_zone_P1, " Low: ", ner_hi_zone_P2, " Strength: ", ner_hi_zone_strength, " inside zone: ", ner_price_inside_zone);
       // Print("Demand Zone High: ", ner_lo_zone_P1, " Low: ", ner_lo_zone_P2, " Strength: ", ner_lo_zone_strength, " inside zone: ", ner_price_inside_zone);
 
-      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ner_lo_zone_strength >= ZONE_VERIFIED && ((Close[1] < ner_lo_zone_P2 + supplyDemandMarginPips * (PipFactor*Point))))
+      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ner_lo_zone_strength >= ZONE_VERIFIED && (Close[1] < ner_lo_zone_P2) && (Close[1] > ner_lo_zone_P2 - supplyDemandMarginPips * (PipFactor*Point)))
       { 
         Trigger = 2;
-        if(OnJournaling) Print("Exit Signal - SELL below support or resistance line");
+        if(OnJournaling) Print("Exit Signal - SELL below supply and demand line");
       }
-      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ner_hi_zone_strength >= ZONE_VERIFIED && (Close[1] > ner_hi_zone_P1 - supplyDemandMarginPips * (PipFactor*Point)))
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ner_hi_zone_strength >= ZONE_VERIFIED && (Close[1] > ner_hi_zone_P1) && (Close[1] < ner_hi_zone_P1 + supplyDemandMarginPips * (PipFactor*Point)))
       {
           Trigger = 1;
-          if(OnJournaling) Print("Exit Signal - BUY above support or resistance line");
+          if(OnJournaling) Print("Exit Signal - BUY above supply and demand line");
       } 
       else
       { //if there are no open position, check for entry signal
@@ -402,7 +427,7 @@ int start()
         {
           // BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 1;
-          if(OnJournaling) Print("Entry Signal - breakout,  BUY above suppot or resistance line");
+          if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
         }
         else if(ner_lo_zone_strength >= ZONE_VERIFIED &&
            ((Close[1] < ner_lo_zone_P2 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P2) ||
@@ -410,7 +435,7 @@ int start()
         {
           // BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 2;
-          if(OnJournaling) Print("Entry Signal - breakout, SELL below suppot or resistance line");
+          if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
         
         } 
       }
@@ -468,7 +493,8 @@ int start()
     {
       if(Trigger==1) // Buy
         {
-          Stop=(Ask - MathMin(Low[1],High[1]))/(PipFactor*Point) + (StopBarMargin * currentSpread * PipFactor); // Stop Loss in Pips
+          Stop=(Ask - MathMin(Low[1],High[1]))/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+          // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           if(Stop<MinStopLossATR) // If the last bar is a Doji
           {
             Stop=myATR/(PipFactor*Point); 
@@ -477,7 +503,8 @@ int start()
         } 
         else if(Trigger==2) 
         { // Sell
-          Stop=(MathMax(Low[1],High[1])-Bid)/(PipFactor*Point) + (StopBarMargin * currentSpread * PipFactor); // Stop Loss in Pips
+          Stop=(MathMax(Low[1],High[1])-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+          // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           if(Stop<MinStopLossATR) // If the last bar is a Doji
           {
             Stop=myATR/(PipFactor*Point); 
@@ -555,7 +582,6 @@ int start()
     if(GetConsecutiveFailureCount(MagicNumber) >= MaxConsecutiveFailures && BreakoutState!=BO_TRIGGERED)
     {
         BreakoutState = BO_WAITING;
-        Trigger = 0; // Reset trigger to no signal
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
         return (0); // Exit without opening new trades
       }
@@ -577,7 +603,7 @@ int start()
     }
 
   //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", Point);
-   if( currentSpread * PipFactor >= MaxSpread )
+   if( currentSpread * PipFactor > MaxSpread )
      {
       if(OnJournaling) Print("Current spread is too high: ", currentSpread * PipFactor, " pips. Max allowed: ", MaxSpread, " pips");
       return (0); // Exit if spread is too high
@@ -2423,7 +2449,7 @@ void VisualizeSignalOverlay(int i, int signal)
    static int signalsCountr = 0;
    string txt = "";
    color col = clrBlack;
-   double y_offset = 100 * Point; // Small offset above/below close
+   double y_offset = Point; // Small offset above/below close
    double y = 0;
 
    double maxVal = MathMax(Low[i], High[i]);
