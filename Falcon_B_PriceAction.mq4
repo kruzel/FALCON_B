@@ -133,7 +133,7 @@ extern int     zigzagBackstep                   = 3;        // ZigZag Backstep
 
 extern string  Header17="---------- Supply and Demand rules Variables-----------";
 extern bool    UseSupplyDemand                  = True;     // Use Supply and Demand Zones
-extern int     supplyDemandMarginPips            = 10;       // Supply and Demand threshold in Pips
+extern int     supplyDemandMarginPips            = 1;       // Supply and Demand threshold in Pips
 
 extern string  Header18="----------Trend rules Variables-----------";
 extern bool    UseReversal                        = True;     // Use Reversal 
@@ -409,29 +409,27 @@ int start()
       // Print("Supply Zone High: ", ner_hi_zone_P1, " Low: ", ner_hi_zone_P2, " Strength: ", ner_hi_zone_strength, " inside zone: ", ner_price_inside_zone);
       // Print("Demand Zone High: ", ner_lo_zone_P1, " Low: ", ner_lo_zone_P2, " Strength: ", ner_lo_zone_strength, " inside zone: ", ner_price_inside_zone);
 
-      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ner_lo_zone_strength >= ZONE_VERIFIED && (Close[1] < ner_lo_zone_P2) && (Close[1] > ner_lo_zone_P2 - supplyDemandMarginPips * (PipFactor*Point)))
+      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (Close[1] < ner_lo_zone_P2) && (Close[1] > ner_lo_zone_P2 - supplyDemandMarginPips * (PipFactor*Point)))
       { 
         Trigger = 2;
         if(OnJournaling) Print("Exit Signal - SELL below supply and demand line");
       }
-      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ner_hi_zone_strength >= ZONE_VERIFIED && (Close[1] > ner_hi_zone_P1) && (Close[1] < ner_hi_zone_P1 + supplyDemandMarginPips * (PipFactor*Point)))
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (Close[1] > ner_hi_zone_P1) && (Close[1] < ner_hi_zone_P1 + supplyDemandMarginPips * (PipFactor*Point)))
       {
           Trigger = 1;
           if(OnJournaling) Print("Exit Signal - BUY above supply and demand line");
       } 
       else
       { //if there are no open position, check for entry signal
-        if(ner_hi_zone_strength >= ZONE_VERIFIED &&
-          ((Close[1] > ner_hi_zone_P1 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P1) ||
-           (Close[1] > ner_hi_zone_P2 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P2)))
+        if((Close[1] > ner_hi_zone_P1 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P1) ||
+           (Close[1] > ner_hi_zone_P2 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P2))
         {
           // BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 1;
           if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
         }
-        else if(ner_lo_zone_strength >= ZONE_VERIFIED &&
-           ((Close[1] < ner_lo_zone_P2 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P2) ||
-           (Close[1] < ner_lo_zone_P1 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P1)))
+        else if((Close[1] < ner_lo_zone_P2 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P2) ||
+           (Close[1] < ner_lo_zone_P1 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P1))
         {
           // BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 2;
@@ -624,7 +622,7 @@ int start()
                 BreakoutState = BO_NORMAL; // Reset breakout flag
                VisualizeSignalOverlay(1, Trigger);
 
-               OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,Stop,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+               OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,Stop, PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
    
                // Set Stop Loss value for Hidden SL
                if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
@@ -645,7 +643,7 @@ int start()
                 BreakoutState = BO_NORMAL; // Reset breakout flag
                VisualizeSignalOverlay(1, Trigger);
 
-               OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,Stop,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+               OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,Stop,PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
    
                // Set Stop Loss value for Hidden SL
                if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
@@ -782,42 +780,59 @@ int ExitSignal(int CrossOccurred)
 
 // This is our sizing algorithm
 
-double GetLot(bool IsSizingOnTrigger ,double FixedLots ,double riskPercent ,double stopLossPips, int AdjustmentFactor = 1) 
+// double GetLot(bool IsSizingOnTrigger ,double FixedLots ,double riskPercent ,double stopLossPips, int AdjustmentFactor = 1) 
+//   {
+
+//    double output;
+
+//    if(IsSizingOnTrigger==true) 
+//      {
+//       double accountBalance = AccountBalance(); // Your total account balance
+//       double riskAmount = accountBalance * riskPercent / 100.0; // The maximum money to risk on this trade
+      
+//       // Pip value per lot for the symbol
+//       double tickValue = MarketInfo(Symbol(), MODE_TICKVALUE);
+//       double tickSize = MarketInfo(Symbol(), MODE_TICKSIZE);
+//       double pipValue = tickValue / tickSize; // Value of 1 pip for 1 lot
+      
+//       // Lot size calculation based on risk and stop loss
+//       output = riskAmount / (stopLossPips * pipValue * Point);
+//       Print("output: ", output, " riskAmount: ", riskAmount, " stopLossPips: ", stopLossPips, " Point: ", Point);
+      
+//       // Normalize lot to nearest allowed step
+//       double lotStep = MarketInfo(Symbol(), MODE_LOTSTEP);
+//       double minLot = MarketInfo(Symbol(), MODE_MINLOT);
+//       double maxLot = MarketInfo(Symbol(), MODE_MAXLOT);
+      
+//       // Adjust lot size within broker limits
+//       output = MathFloor(output / lotStep) * lotStep;
+
+//       if (output <= minLot) output = 0; // Can't trade less than minimum
+//       if (output >= maxLot) output = maxLot;
+//     } 
+//     else {
+//       output=FixedLots;
+//      }
+
+//    output=NormalizeDouble(output,2); // Round to 2 decimal place
+//    output=output*AdjustmentFactor; // for Yen 100
+
+//    return(output);
+//   }
+
+  double GetLot(bool IsSizingOnTrigger,double FixedLots,double RiskPerTrade, double STOP,int K, int AdjustmentFactor = 1) 
   {
 
    double output;
 
    if(IsSizingOnTrigger==true) 
      {
-      double accountBalance = AccountBalance(); // Your total account balance
-      double riskAmount = accountBalance * riskPercent / 100.0; // The maximum money to risk on this trade
-      
-      // Pip value per lot for the symbol
-      double tickValue = MarketInfo(Symbol(), MODE_TICKVALUE);
-      double tickSize = MarketInfo(Symbol(), MODE_TICKSIZE);
-      double pipValue = tickValue / tickSize; // Value of 1 pip for 1 lot
-      
-      // Lot size calculation based on risk and stop loss
-      output = riskAmount / (stopLossPips * pipValue * Point);
-      
-      // Normalize lot to nearest allowed step
-      double lotStep = MarketInfo(Symbol(), MODE_LOTSTEP);
-      double minLot = MarketInfo(Symbol(), MODE_MINLOT);
-      double maxLot = MarketInfo(Symbol(), MODE_MAXLOT);
-      
-      // Adjust lot size within broker limits
-      output = MathFloor(output / lotStep) * lotStep;
-
-      if (output <= minLot) output = 0; // Can't trade less than minimum
-      if (output >= maxLot) output = maxLot;
-    } 
-    else {
+      output=RiskPerTrade*0.01*AccountBalance()/(MarketInfo(Symbol(),MODE_LOTSIZE)*MarketInfo(Symbol(),MODE_TICKVALUE)*STOP*K*Point); // Sizing Algo based on account size
+      output=output*AdjustmentFactor; // Adjust for Yen Pairs
+        } else {
       output=FixedLots;
      }
-
    output=NormalizeDouble(output,2); // Round to 2 decimal place
-   output=output*AdjustmentFactor; // for Yen 100
-
    return(output);
   }
 //+------------------------------------------------------------------+
@@ -1062,7 +1077,7 @@ int OpenPositionPending(int TYPE,double OpenPrice,datetime expiration,double LOT
    int tries=0;
    string symbol=Symbol();
    int cmd=TYPE;
-   double volume=LOT; //CheckLot(LOT,Journaling);
+   double volume=CheckLot(LOT,Journaling);
    if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume>AccountFreeMargin())
      {
       Print("Can not open a trade. Not enough free margin to open "+(string)volume+" on "+symbol);
