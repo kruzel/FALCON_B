@@ -351,12 +351,12 @@ int start()
 
    if(UseReversal)
    {
-      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (paState.trendState == DOWN_TREND || paState.trendState == UP_TREND_RETRACEMENT || IsBearishPinBar(1)))
+      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (paState.trendState == DOWN_TREND || IsBearishPinBar(1)))
       {
          Trigger = 2; // Sell signal
          if(OnJournaling) Print("Exit Signal - SELL on reversal to DOWN_TREND");
       }
-      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (paState.trendState == UP_TREND || paState.trendState == DOWN_TREND_RETRACEMENT || IsBearishPinBar(1)))
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (paState.trendState == UP_TREND || IsBearishPinBar(1)))
       {
          Trigger = 1; // Buy signal
          if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND");
@@ -780,61 +780,61 @@ int ExitSignal(int CrossOccurred)
 
 // This is our sizing algorithm
 
-// double GetLot(bool IsSizingOnTrigger ,double FixedLots ,double riskPercent ,double stopLossPips, int AdjustmentFactor = 1) 
-//   {
-
-//    double output;
-
-//    if(IsSizingOnTrigger==true) 
-//      {
-//       double accountBalance = AccountBalance(); // Your total account balance
-//       double riskAmount = accountBalance * riskPercent / 100.0; // The maximum money to risk on this trade
-      
-//       // Pip value per lot for the symbol
-//       double tickValue = MarketInfo(Symbol(), MODE_TICKVALUE);
-//       double tickSize = MarketInfo(Symbol(), MODE_TICKSIZE);
-//       double pipValue = tickValue / tickSize; // Value of 1 pip for 1 lot
-      
-//       // Lot size calculation based on risk and stop loss
-//       output = riskAmount / (stopLossPips * pipValue * Point);
-//       Print("output: ", output, " riskAmount: ", riskAmount, " stopLossPips: ", stopLossPips, " Point: ", Point);
-      
-//       // Normalize lot to nearest allowed step
-//       double lotStep = MarketInfo(Symbol(), MODE_LOTSTEP);
-//       double minLot = MarketInfo(Symbol(), MODE_MINLOT);
-//       double maxLot = MarketInfo(Symbol(), MODE_MAXLOT);
-      
-//       // Adjust lot size within broker limits
-//       output = MathFloor(output / lotStep) * lotStep;
-
-//       if (output <= minLot) output = 0; // Can't trade less than minimum
-//       if (output >= maxLot) output = maxLot;
-//     } 
-//     else {
-//       output=FixedLots;
-//      }
-
-//    output=NormalizeDouble(output,2); // Round to 2 decimal place
-//    output=output*AdjustmentFactor; // for Yen 100
-
-//    return(output);
-//   }
-
-  double GetLot(bool IsSizingOnTrigger,double FixedLots,double RiskPerTrade, double STOP,int K, int AdjustmentFactor = 1) 
+double GetLot(bool IsSizingOnTrigger ,double FixedLots ,double riskPercent ,double stopLossPips,int K, int AdjustmentFactor = 1) 
   {
 
    double output;
 
    if(IsSizingOnTrigger==true) 
      {
-      output=RiskPerTrade*0.01*AccountBalance()/(MarketInfo(Symbol(),MODE_LOTSIZE)*MarketInfo(Symbol(),MODE_TICKVALUE)*STOP*K*Point); // Sizing Algo based on account size
-      output=output*AdjustmentFactor; // Adjust for Yen Pairs
-        } else {
+      double accountBalance = AccountBalance(); // Your total account balance
+      double riskAmount = accountBalance * riskPercent / 100.0; // The maximum money to risk on this trade
+      
+      // Pip value per lot for the symbol
+      double tickValue = MarketInfo(Symbol(), MODE_TICKVALUE);
+      double tickSize = MarketInfo(Symbol(), MODE_TICKSIZE);
+      double pipValue = tickValue / tickSize; // Value of 1 pip for 1 lot
+      
+      // Lot size calculation based on risk and stop loss
+      output = riskAmount / (stopLossPips * pipValue * Point);
+      Print("output: ", output, " riskAmount: ", riskAmount, " stopLossPips: ", stopLossPips, " Point: ", Point);
+      
+      // Normalize lot to nearest allowed step
+      double lotStep = MarketInfo(Symbol(), MODE_LOTSTEP);
+      double minLot = MarketInfo(Symbol(), MODE_MINLOT);
+      double maxLot = MarketInfo(Symbol(), MODE_MAXLOT);
+      
+      // Adjust lot size within broker limits
+      output = MathFloor(output / lotStep) * lotStep;
+
+      if (output <= minLot) output = 0; // Can't trade less than minimum
+      if (output >= maxLot) output = maxLot;
+    } 
+    else {
       output=FixedLots;
      }
+
    output=NormalizeDouble(output,2); // Round to 2 decimal place
+   output=output*AdjustmentFactor; // for Yen 100
+
    return(output);
   }
+
+  // double GetLot(bool IsSizingOnTrigger,double FixedLots,double RiskPerTrade, double STOP,int K, int AdjustmentFactor = 1) 
+  // {
+
+  //  double output;
+
+  //  if(IsSizingOnTrigger==true) 
+  //    {
+  //     output=RiskPerTrade*0.01*AccountBalance()/(MarketInfo(Symbol(),MODE_LOTSIZE)*MarketInfo(Symbol(),MODE_TICKVALUE)*STOP*K*Point); // Sizing Algo based on account size
+  //     output=output*AdjustmentFactor; // Adjust for Yen Pairs
+  //       } else {
+  //     output=FixedLots;
+  //    }
+  //  output=NormalizeDouble(output,2); // Round to 2 decimal place
+  //  return(output);
+  // }
 //+------------------------------------------------------------------+
 //| End of Position Sizing Algo               
 //+------------------------------------------------------------------+
@@ -931,7 +931,7 @@ int OpenPositionMarket(int TYPE,double LOT,double SL,double TP,int Magic,int Sli
    int tries=0;
    string symbol=Symbol();
    int cmd=TYPE;
-   double volume=CheckLot(LOT,Journaling);
+   double volume=LOT; //CheckLot(LOT,Journaling);
    if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume>AccountFreeMargin())
      {
       Print("Can not open a trade. Not enough free margin to open "+(string)volume+" on "+symbol, " margin required: ", MarketInfo(symbol,MODE_MARGINREQUIRED), " volume: ", volume, " free margin: ", AccountFreeMargin());
@@ -1077,7 +1077,7 @@ int OpenPositionPending(int TYPE,double OpenPrice,datetime expiration,double LOT
    int tries=0;
    string symbol=Symbol();
    int cmd=TYPE;
-   double volume=CheckLot(LOT,Journaling);
+   double volume=LOT; //CheckLot(LOT,Journaling);
    if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume>AccountFreeMargin())
      {
       Print("Can not open a trade. Not enough free margin to open "+(string)volume+" on "+symbol);
@@ -2462,23 +2462,31 @@ If Output is 2: Price crossed line from Top (Bearish)
 void VisualizeSignalOverlay(int i, int signal)
 {
    static int signalsCountr = 0;
-   string txt = "";
+  //  string txt = "";
+  int arrowCode = 0;
    color col = clrBlack;
-   double y_offset = Point; // Small offset above/below close
+   double y_offset = 10*Point; // Small offset above/below close
    double y = 0;
 
    double maxVal = MathMax(Low[i], High[i]);
    double minVal = MathMin(Low[i], High[i]);
 
    switch(signal) {
-      case 1:   txt = "(B)";  col = clrYellow;  y = maxVal + 8*y_offset; break;   
-      case 2:   txt = "(S)";  col = clrYellow;   y = minVal - 4*y_offset; break; 
+      // case 1:   txt = "(B)";  col = clrBlack;  y = maxVal + 8*y_offset; break;   
+      // case 2:   txt = "(S)";  col = clrBlack;   y = minVal - 4*y_offset; break; 
+      case 1:   arrowCode = 233;  col = clrBlack;  y = maxVal + 8*y_offset; break;   
+      case 2:   arrowCode = 234;  col = clrBlack;   y = minVal - 4*y_offset; break; 
+      
       default:  return; //              ObjectDelete("peak_" + IntegerToString(i)); return;
    }
-   string name = "signal_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + txt;
+   string name = "signal_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + arrowCode;
   //  Print("VisualizeSignalOverlay: i=", i, " name=", name, ", y=", y);
 
    ObjectDelete(name);
-   ObjectCreate(name, OBJ_TEXT, 0, Time[i], y);
-   ObjectSetText(name, txt, 12, "Arial", col);
+  //  ObjectCreate(name, OBJ_TEXT, 0, Time[i], y);
+  //  ObjectSetText(name, txt, 12, "Arial", col);
+   ObjectCreate(name, OBJ_ARROW, 0, Time[i], y);
+   ObjectSet(name, OBJPROP_STYLE, STYLE_SOLID);
+   ObjectSet(name, OBJPROP_ARROWCODE, arrowCode); // e.g., 233 for up, 234 for down
+   ObjectSet(name, OBJPROP_COLOR, col);
 }
