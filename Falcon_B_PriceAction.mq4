@@ -44,6 +44,7 @@ extern bool    IsSizingOn                       = True; // Risk based sizing, ig
 extern double  Risk                             = 1; // Risk per trade (%)
 extern int     MaxPositionsAllowed              = 1;
 extern double  MaxSpread                        = 50; // Maximum spread (Pips)
+extern bool    UseMaxSpreadATR                  = True;
 extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
 
 extern string  Header4="----------TP & SL Settings-----------";
@@ -601,9 +602,17 @@ int start()
     }
 
   //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", Point);
-   if( currentSpread * PipFactor > MaxSpread )
+    if(UseMaxSpreadATR)
+    {
+      if (currentSpread  > myATR / Point)
+      {
+        if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. ATR: ", myATR, " pips");
+        return (0); // Exit if spread is too high
+      }
+    }
+    else if( currentSpread  > MaxSpread * PipFactor )
      {
-      if(OnJournaling) Print("Current spread is too high: ", currentSpread * PipFactor, " pips. Max allowed: ", MaxSpread, " pips");
+      if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. Max allowed: ", MaxSpread, " pips");
       return (0); // Exit if spread is too high
      }
 
@@ -1220,6 +1229,11 @@ int GetPipFactor()
       output=1;
    else
       output=1;
+
+   
+
+   Print("GetPipFactor: ", output);
+
    return(output);
 
 /* Some definitions: Pips vs Point
@@ -2479,7 +2493,7 @@ void VisualizeSignalOverlay(int i, int signal)
       
       default:  return; //              ObjectDelete("peak_" + IntegerToString(i)); return;
    }
-   string name = "signal_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + arrowCode;
+   string name = "signal_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + string(arrowCode);
   //  Print("VisualizeSignalOverlay: i=", i, " name=", name, ", y=", y);
 
    ObjectDelete(name);
