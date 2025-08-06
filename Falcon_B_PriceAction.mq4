@@ -50,7 +50,7 @@ extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, f
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
-extern double  MinStopLossATR                   = 5; // Minimum Stop Loss in Pips or ATR
+extern double  MinStopLossElseATR                   = 5; // Minimum Stop Loss in Pips else ATR
 extern double  StopBarMargin                    = 10; // stop loss margin % of stop size
 
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
@@ -84,8 +84,8 @@ extern double  BreakevenBuffer_Hidden           = 0; // In pips
 
 extern string  Header8="----------Trailing Stops Settings-----------";
 extern bool    UseTrailingStops                 = False;
-extern double  TrailingStopDistance             = 0; // In pips
-extern double  TrailingStopBuffer               = 0; // In pips
+extern double  TrailingStopDistance             = 10; // In pips
+extern double  TrailingStopBuffer               = 10; // In pips
 
 extern string  Header9="----------Hidden Trailing Stops Settings-----------";
 extern bool    UseHiddenTrailingStops           = False;
@@ -298,6 +298,9 @@ int start()
     sr.SRUpdate(0); // Update for current bar
 
    double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); //points
+   myATR=iATR(NULL,Period(),atr_period,1);
+
+  //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", Point, " ATR: ", myATR);
 
    Trigger = 0;
    
@@ -478,8 +481,6 @@ int start()
     }  
 
 //----------TP, SL, Breakeven and Trailing Stops Variables-----------
-
-   myATR=iATR(NULL,Period(),atr_period,1);
    
     if(UseFixedStopLoss==True) 
     {
@@ -494,7 +495,7 @@ int start()
         {
           Stop=(Ask - MathMin(Low[1],High[1]))/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          if(Stop<MinStopLossATR) // If the last bar is a Doji
+          if(Stop<MinStopLossElseATR) // If the last bar is a Doji
           {
             Stop=myATR/(PipFactor*Point); 
             Print("Doji detected, using ATR for Stop Loss: ", Stop);
@@ -504,7 +505,7 @@ int start()
         { // Sell
           Stop=(MathMax(Low[1],High[1])-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          if(Stop<MinStopLossATR) // If the last bar is a Doji
+          if(Stop<MinStopLossElseATR) // If the last bar is a Doji
           {
             Stop=myATR/(PipFactor*Point); 
             Print("Doji detected, using ATR for Stop Loss: ", Stop);
@@ -601,12 +602,12 @@ int start()
       }
     }
 
-  //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", Point);
+   
     if(UseMaxSpreadATR)
     {
-      if (currentSpread  > myATR / Point)
+      if (currentSpread  > myATR / Point / 3)
       {
-        if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. ATR: ", myATR, " pips");
+        if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. ATR: ", myATR / (PipFactor*Point), " pips");
         return (0); // Exit if spread is too high
       }
     }
