@@ -375,7 +375,7 @@ int start()
          Trigger = 2; // Sell signal
          if(OnJournaling) Print("Exit Signal - SELL on reversal to DOWN_TREND");
       }
-      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (paState.trendState == UP_TREND || IsBearishPinBar(1)))
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (paState.trendState == UP_TREND || IsBullishPinBar(1)))
       {
          Trigger = 1; // Buy signal
          if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND");
