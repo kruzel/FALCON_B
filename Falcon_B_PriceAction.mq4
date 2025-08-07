@@ -12,6 +12,7 @@
 #include <Falcon_B_Include/PriceActionStates.mqh>
 #include <Falcon_B_Include/SupportResistance.mqh>
 #include <Falcon_B_Include/PinBarDetector.mqh>
+#include <Falcon_B_Include/TradingControl.mqh>
 
 
 #property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
@@ -109,7 +110,7 @@ extern string  Header13="----------Set Max Loss Limit-----------";
 extern bool    IsLossLimitActivated             = False;
 extern double  LossLimitPercent                 = 50;
 extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
-extern int     BreakoutMarginPips                   = 1; // Margin in Pips to consider breakout
+extern int     BreakoutMarginPips               = 10; // Margin in Pips to consider breakout
 
 extern string  Header14="----------Set Max Volatility Limit-----------";
 extern bool    IsVolLimitActivated              = False;
@@ -134,7 +135,7 @@ extern int     zigzagBackstep                   = 3;        // ZigZag Backstep
 
 extern string  Header17="---------- Supply and Demand rules Variables-----------";
 extern bool    UseSupplyDemand                  = True;     // Use Supply and Demand Zones
-extern int     supplyDemandMarginPips            = 1;       // Supply and Demand threshold in Pips
+extern int     supplyDemandMarginPips            = 10;       // Supply and Demand threshold in Pips
 
 extern string  Header18="----------Trend rules Variables-----------";
 extern bool    UseReversal                        = True;     // Use Reversal 
@@ -162,7 +163,8 @@ double myATR;
 double PipFiniteUptrendSignal1, PipFiniteDowntrendSignal1;
 int EntrySignal;
 
-CSupportResistance* sr;
+CSupportResistance* SupportResistance;
+CTradingControl* TradeController;
 
 int Trigger;
 int SRTriggered;
@@ -229,7 +231,7 @@ int init()
                Comment("Trade is allowed");
             }
             
-//---------             
+                
    
    PipFactor=GetPipFactor(); // To account for 5 digit brokers. Used to convert pips to decimal place
 
@@ -245,7 +247,10 @@ int init()
 
    PaInit();
    if(UseSupportResistance)
-    sr = new CSupportResistance(SRmarginPips, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
+    SupportResistance = new CSupportResistance(SRmarginPips, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
+
+    TradeController = new CTradingControl();
+    TradeController.CreateButton();
 
    start();
    return(0);
@@ -261,7 +266,13 @@ int deinit()
 //----
     PaDeinit(); // Deinitialize ZigZag indicator
     if(UseSupportResistance)
-      delete sr;
+      delete SupportResistance;
+
+    if(TradeController != NULL)
+      {
+        delete TradeController;
+        TradeController = NULL;
+      }
 //----
    return(0);
   }
@@ -290,20 +301,24 @@ int start()
 //----------Variables to be Refreshed-----------
 
    OrderNumber=0; // OrderNumber used in Entry Rules
-
-//----------Entry & Exit Variables-----------
-
+    Trigger = 0; // Reset trigger for entry/exit signals
    PaResults paState = PaProcessBars(1);
    if(UseSupportResistance)
-    sr.SRUpdate(0); // Update for current bar
+    SupportResistance.SRUpdate(0); // Update for current bar
+  
+    if(!TradeController.IsTradingEnabled())
+      {
+        Print("Trading is disabled, click the button to enable trading.");
+        return (0);
+      } 
 
    double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); //points
    myATR=iATR(NULL,Period(),atr_period,1);
 
-  //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", Point, " ATR: ", myATR);
-
-   Trigger = 0;
+  //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", " ATR: ", myATR);
    
+   //----------Entry & Exit rules -----------
+
    if(CountPosOrders(MagicNumber,-1) == 0)
     {
       // check continuation after retracement
@@ -333,7 +348,7 @@ int start()
       {
           if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPips*PipFactor*Point);
           PriceActionState peaksState = GetPrevPeaks();
-          if(Close[1] > peaksState.peakClose2 + BreakoutMarginPips*PipFactor*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
+          if(Close[1] > peaksState.peakCloseHighest + BreakoutMarginPips*PipFactor*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 1; // Buy signal
@@ -344,7 +359,7 @@ int start()
       {
           if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPips*PipFactor*Point);
           PriceActionState peaksState = GetPrevPeaks();
-          if(Close[1] < peaksState.peakClose2 - BreakoutMarginPips*PipFactor*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
+          if(Close[1] < peaksState.peakCloseLowest - BreakoutMarginPips*PipFactor*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 2; // Sell signal
@@ -370,7 +385,7 @@ int start()
    // support resistance exit rules
    if(UseSupportResistance)
    {
-      SRresult SRres = sr.CheckNearSR(Close[1], paState.trendState);
+      SRresult SRres = SupportResistance.CheckNearSR(Close[1], paState.trendState);
       if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (SRres.status == BELOW_RESISTANCE || SRres.status == BELOW_SUPPORT))
       { 
         Trigger = 2;
@@ -383,7 +398,7 @@ int start()
       } 
       else
       { //if there are no open position, check for entry signal
-        int SRCrossTriggered = sr.CheckSRCrossed(Close[2], Close[1]); 
+        int SRCrossTriggered = SupportResistance.CheckSRCrossed(Close[2], Close[1]); 
         if(SRCrossTriggered == 1)
         {
           // BreakoutState = BO_TRIGGERED; // set breakout flag
@@ -572,10 +587,32 @@ int start()
     if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
     {
       datetime localTime = TimeLocal();
-      if(TimeHour(localTime) < TradingStartHour || (TimeHour(localTime) == TradingStartHour && TimeMinute(localTime) < TradingStartMinute) || TimeHour(localTime) > TradingEndHour || (TimeHour(localTime) == TradingEndHour && TimeMinute(localTime) > TradingEndMinute))
+      int currentHour = TimeHour(localTime);
+      int currentMinute = TimeMinute(localTime);
+
+      bool isBeforeStart = (currentHour < TradingStartHour) || (currentHour == TradingStartHour && currentMinute < TradingStartMinute);
+      bool isAfterEnd = (currentHour > TradingEndHour) || (currentHour == TradingEndHour && currentMinute > TradingEndMinute);
+
+      // if (OnJournaling) Print("Check trading hours: ", currentHour, ":", currentMinute,
+      //                         " Start: ", TradingStartHour, ":", TradingStartMinute,
+      //                         " End: ", TradingEndHour, ":", TradingEndMinute,
+      //                         " Before Start: ", isBeforeStart, " After End: ", isAfterEnd);
+
+      if (TradingStartHour <= TradingEndHour) // Normal time range within the same day
       {
-        if(OnJournaling) Print("waiting for valid trading time: ", TimeHour(localTime), ":", TimeMinute(localTime));
-        return (0);
+        if (isBeforeStart || isAfterEnd)
+        {
+          if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
+          return (0);
+        }
+      }
+      else // Time range spans midnight
+      {
+        if (!isBeforeStart && !isAfterEnd)
+        {
+          if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
+          return (0);
+        }
       }
     }
 
@@ -1571,6 +1608,7 @@ void TriggerTakeProfitHidden(bool Journaling,int Retry_Interval,int Magic,int Sl
                   break;
                  }
               }
+
            }
 
          if(doesOrderExist==False) 
@@ -2504,4 +2542,22 @@ void VisualizeSignalOverlay(int i, int signal)
    ObjectSet(name, OBJPROP_STYLE, STYLE_SOLID);
    ObjectSet(name, OBJPROP_ARROWCODE, arrowCode); // e.g., 233 for up, 234 for down
    ObjectSet(name, OBJPROP_COLOR, col);
+}
+
+//+------------------------------------------------------------------+
+//| Chart event function                                              |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id,
+                  const long &lparam,
+                  const double &dparam,
+                  const string &sparam)
+{
+    // Handle button clicks
+    if(id == CHARTEVENT_OBJECT_CLICK)
+    {
+        if(TradeController != NULL && sparam == "AutoTradingBtn")
+        {
+            TradeController.CheckButtonClick();
+        }
+    }
 }
