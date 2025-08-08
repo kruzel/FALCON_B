@@ -301,7 +301,7 @@ int start()
 //----------Variables to be Refreshed-----------
 
    OrderNumber=0; // OrderNumber used in Entry Rules
-    Trigger = 0; // Reset trigger for entry/exit signals
+   Trigger = 0; // Reset trigger for entry/exit signals
    PaResults paState = PaProcessBars(1);
    if(UseSupportResistance)
     SupportResistance.SRUpdate(0); // Update for current bar
@@ -313,6 +313,8 @@ int start()
       } 
 
    double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); //points
+   bool IsAfterExit = false;
+
    myATR=iATR(NULL,Period(),atr_period,1);
 
   //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", " ATR: ", myATR);
@@ -458,17 +460,13 @@ int start()
       }
    }
 
-   //----------PipFinite Entry Rules-----------
-   //must be last decision to avoid other rules to override it
+   //----------PipFinite Entry signals-----------
    double pipFiniteLine = EMPTY_VALUE;
    if(UsePipFiniteEntry)
     {
       // Get PipFinite indicator values with proper parameters
       PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
       PipFiniteDowntrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_DowntrendBuffer, 1); // Buffer for Downtrend, Shift 1
-
-      // Calculate entry signals using Close[2] and Close[1] for crossing logic
-      // Use main trend line - choose uptrend or downtrend based on which has valid data
       
       if (PipFiniteUptrendSignal1 != EMPTY_VALUE && PipFiniteUptrendSignal1 != 0)
         pipFiniteLine = PipFiniteUptrendSignal1;
@@ -576,11 +574,12 @@ int start()
    if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(Trigger)==2)
      { // Close Long Positions
       CloseOrderPosition(OP_BUY, OnJournaling, MagicNumber, Slippage, PipFactor, RetryInterval); 
-
+      IsAfterExit = true; // Set flag to indicate exit
      }
    if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ExitSignal(Trigger)==1)
      { // Close Short Positions
       CloseOrderPosition(OP_SELL, OnJournaling, MagicNumber, Slippage, PipFactor, RetryInterval);
+      IsAfterExit = true; // Set flag to indicate exit
      }
 
 //----------Entry Rules (Market and Pending) -----------
@@ -592,11 +591,6 @@ int start()
 
       bool isBeforeStart = (currentHour < TradingStartHour) || (currentHour == TradingStartHour && currentMinute < TradingStartMinute);
       bool isAfterEnd = (currentHour > TradingEndHour) || (currentHour == TradingEndHour && currentMinute > TradingEndMinute);
-
-      // if (OnJournaling) Print("Check trading hours: ", currentHour, ":", currentMinute,
-      //                         " Start: ", TradingStartHour, ":", TradingStartMinute,
-      //                         " End: ", TradingEndHour, ":", TradingEndMinute,
-      //                         " Before Start: ", isBeforeStart, " After End: ", isAfterEnd);
 
       if (TradingStartHour <= TradingEndHour) // Normal time range within the same day
       {
@@ -616,14 +610,32 @@ int start()
       }
     }
 
-    if(GetConsecutiveFailureCount(MagicNumber) >= MaxConsecutiveFailures && BreakoutState!=BO_TRIGGERED)
+   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger))==True) 
+   {
+      if(OnJournaling) Print("Loss limit breached, no new trades will be opened until reset.");
+      return (0);
+   }
+
+   if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==True)
+   {
+      if(OnJournaling) Print("Volatility limit breached, no new trades will be opened until reset.");
+      return (0); // Exit if volatility limit is breached
+   }
+
+   if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==True)
+   {
+      if(OnJournaling) Print("Max positions not reached, can open new trades.");
+      return (0);
+   }
+
+   if(Trigger==0 && BreakoutState!=BO_TRIGGERED && !IsAfterExit && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures)
     {
         BreakoutState = BO_WAITING;
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
         return (0); // Exit without opening new trades
       }
 
-    if(UsePipFiniteEntry)
+    if(UsePipFiniteEntry && !IsAfterExit) // pip finite rules apply only for new trades
     {
       if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
       {
@@ -639,7 +651,6 @@ int start()
       }
     }
 
-   
     if(UseMaxSpreadATR)
     {
       if (currentSpread  > myATR / Point / 3)
@@ -660,52 +671,48 @@ int start()
       return (0); // Exit if Stop Loss is zero
     }
 
-   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger))==False) 
-      if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==False)
-         if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==False)
-           {
-            if(TradeAllowed && EntrySignal(Trigger)==1)
-              { // Open Long Positions
-                BreakoutState = BO_NORMAL; // Reset breakout flag
-               VisualizeSignalOverlay(1, Trigger);
+   if(TradeAllowed && EntrySignal(Trigger)==1)
+    { // Open Long Positions
+      BreakoutState = BO_NORMAL; // Reset breakout flag
+      VisualizeSignalOverlay(1, Trigger);
 
-               OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,Stop, PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
-   
-               // Set Stop Loss value for Hidden SL
-               if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
-   
-               // Set Take Profit value for Hidden TP
-               if(UseHiddenTakeProfit) SetTakeProfitHidden(OnJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,PipFactor,OrderNumber);
-               
-               // Set Volatility Trailing Stop Level           
-               if(UseVolTrailingStops) SetVolTrailingStop(OnJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,PipFactor,OrderNumber);
-               
-               // Set Hidden Volatility Trailing Stop Level 
-               if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,PipFactor,OrderNumber);
-             
-              }
-   
-            if(TradeAllowed && EntrySignal(Trigger)==2)
-              { // Open Short Positions
-                BreakoutState = BO_NORMAL; // Reset breakout flag
-               VisualizeSignalOverlay(1, Trigger);
+      OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,Stop, PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
-               OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,Stop,PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
-   
-               // Set Stop Loss value for Hidden SL
-               if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
-   
-               // Set Take Profit value for Hidden TP
-               if(UseHiddenTakeProfit) SetTakeProfitHidden(OnJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,PipFactor,OrderNumber);
-               
-               // Set Volatility Trailing Stop Level 
-               if(UseVolTrailingStops) SetVolTrailingStop(OnJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,PipFactor,OrderNumber);
-                
-               // Set Hidden Volatility Trailing Stop Level  
-               if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,PipFactor,OrderNumber);
-             
-              }
-           }
+      // Set Stop Loss value for Hidden SL
+      if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
+
+      // Set Take Profit value for Hidden TP
+      if(UseHiddenTakeProfit) SetTakeProfitHidden(OnJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,PipFactor,OrderNumber);
+      
+      // Set Volatility Trailing Stop Level           
+      if(UseVolTrailingStops) SetVolTrailingStop(OnJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,PipFactor,OrderNumber);
+      
+      // Set Hidden Volatility Trailing Stop Level 
+      if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,PipFactor,OrderNumber);
+    
+    }
+
+   if(TradeAllowed && EntrySignal(Trigger)==2)
+    { // Open Short Positions
+      BreakoutState = BO_NORMAL; // Reset breakout flag
+      VisualizeSignalOverlay(1, Trigger);
+
+      OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,Stop,PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+
+      // Set Stop Loss value for Hidden SL
+      if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
+
+      // Set Take Profit value for Hidden TP
+      if(UseHiddenTakeProfit) SetTakeProfitHidden(OnJournaling,IsVolatilityTakeProfitOn_Hidden,FixedTakeProfit_Hidden,myATR,VolBasedTPMultiplier_Hidden,PipFactor,OrderNumber);
+      
+      // Set Volatility Trailing Stop Level 
+      if(UseVolTrailingStops) SetVolTrailingStop(OnJournaling,RetryInterval,myATR,VolTrailingDistMultiplier,MagicNumber,PipFactor,OrderNumber);
+      
+      // Set Hidden Volatility Trailing Stop Level  
+      if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,PipFactor,OrderNumber);
+    
+    }
+           
 
 //----------Pending Order Management-----------
 /*
