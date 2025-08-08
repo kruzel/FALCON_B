@@ -352,7 +352,7 @@ int start()
           PriceActionState peaksState = GetPrevPeaks();
           if(Close[1] > peaksState.peakCloseHighest + BreakoutMarginPips*PipFactor*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
           {
-            BreakoutState = BO_TRIGGERED; // set breakout flag
+            // BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 1; // Buy signal
             if(OnJournaling) Print("Entry Signal - BUY on breakout");
           }
@@ -363,7 +363,7 @@ int start()
           PriceActionState peaksState = GetPrevPeaks();
           if(Close[1] < peaksState.peakCloseLowest - BreakoutMarginPips*PipFactor*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
           {
-            BreakoutState = BO_TRIGGERED; // set breakout flag
+            // BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 2; // Sell signal
             if(OnJournaling) Print("Entry Signal - SELL on breakout");
           }
@@ -445,14 +445,14 @@ int start()
         if((Close[1] > ner_hi_zone_P1 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P1) ||
            (Close[1] > ner_hi_zone_P2 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P2))
         {
-          // BreakoutState = BO_TRIGGERED; // set breakout flag
+          BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 1;
           if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
         }
         else if((Close[1] < ner_lo_zone_P2 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P2) ||
            (Close[1] < ner_lo_zone_P1 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P1))
         {
-          // BreakoutState = BO_TRIGGERED; // set breakout flag
+          BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 2;
           if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
         
