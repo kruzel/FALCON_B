@@ -110,7 +110,7 @@ extern string  Header13="----------Set Max Loss Limit-----------";
 extern bool    IsLossLimitActivated             = False;
 extern double  LossLimitPercent                 = 50;
 extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
-extern int     BreakoutMarginPips               = 10; // Margin in Pips to consider breakout
+extern int     BreakoutMarginPips               = 1; // Margin in Pips to consider breakout
 
 extern string  Header14="----------Set Max Volatility Limit-----------";
 extern bool    IsVolLimitActivated              = False;
