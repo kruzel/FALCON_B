@@ -511,9 +511,9 @@ int start()
           if(Stop<MinStopLossElseATR) // If the last bar is a Doji
           {
             Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-            Print("Bar too small, using ATR for Stop Loss: ", Stop);
+            Print("Stop too small, using ATR for Stop Loss: ", Stop);
           } 
-          else if(Sop>2*myATR) // If the stop is too large, use ATR
+          else if(Stop>2*myATR) // If the stop is too large, use ATR
           {
             Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
             Print("Stop is too large, using ATR for Stop Loss: ", Stop);
@@ -526,9 +526,9 @@ int start()
           if(Stop<MinStopLossElseATR) // If the last bar is a Doji
           {
             Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-            Print("Doji detected, using ATR for Stop Loss: ", Stop);
+            Print("Stop too small, using ATR for Stop Loss: ", Stop);
           }
-          else if(Sop>2*myATR) // If the stop is too large, use ATR
+          else if(Stop>2*myATR) // If the stop is too large, use ATR
           {
             Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
             Print("Stop is too large, using ATR for Stop Loss: ", Stop);
