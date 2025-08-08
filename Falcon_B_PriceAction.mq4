@@ -891,7 +891,7 @@ double GetLot(bool IsSizingOnTrigger ,double FixedLots ,double riskPercent ,doub
       
       // Lot size calculation based on risk and stop loss
       output = riskAmount / (stopLossPips * pipValue * Point);
-      Print("output: ", output, " riskAmount: ", riskAmount, " stopLossPips: ", stopLossPips, " Point: ", Point);
+      // Print("output: ", output, " riskAmount: ", riskAmount, " stopLossPips: ", stopLossPips, " Point: ", Point);
       
       // Normalize lot to nearest allowed step
       double lotStep = MarketInfo(Symbol(), MODE_LOTSTEP);
