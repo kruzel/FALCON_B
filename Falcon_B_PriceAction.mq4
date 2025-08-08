@@ -51,13 +51,13 @@ extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, f
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
-extern double  MinStopLossElseATR                   = 5; // Minimum Stop Loss in Pips else ATR
+extern double  MinStopLossElseATR               = 5; // Minimum Stop Loss in Pips else ATR
 extern double  StopBarMargin                    = 10; // stop loss margin % of stop size
 
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
 extern bool    IsVolatilityStopOn               = False;
-extern double  VolBasedSLMultiplier             = 3; // Stop Loss Amount in units of Volatility
+extern double  VolBasedSLMultiplier             = 1; // Stop Loss Amount in units of Volatility
 
 extern bool    UseFixedTakeProfit               = False; // Fixed size take profit
 extern double  FixedTakeProfit                  = 0; // Hard Take Profit in Pips. Will be overridden if vol-based TP is true 
@@ -510,8 +510,13 @@ int start()
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           if(Stop<MinStopLossElseATR) // If the last bar is a Doji
           {
-            Stop=myATR/(PipFactor*Point); 
-            Print("Doji detected, using ATR for Stop Loss: ", Stop);
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+            Print("Bar too small, using ATR for Stop Loss: ", Stop);
+          } 
+          else if(Sop>2*myATR) // If the stop is too large, use ATR
+          {
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+            Print("Stop is too large, using ATR for Stop Loss: ", Stop);
           }
         } 
         else if(Trigger==2) 
@@ -520,8 +525,13 @@ int start()
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           if(Stop<MinStopLossElseATR) // If the last bar is a Doji
           {
-            Stop=myATR/(PipFactor*Point); 
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
             Print("Doji detected, using ATR for Stop Loss: ", Stop);
+          }
+          else if(Sop>2*myATR) // If the stop is too large, use ATR
+          {
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+            Print("Stop is too large, using ATR for Stop Loss: ", Stop);
           }
         }
     } else
@@ -624,7 +634,7 @@ int start()
 
    if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==True)
    {
-      if(OnJournaling) Print("Max positions not reached, can open new trades.");
+      if(OnJournaling) Print("Max positions reached, cannot open new trades.");
       return (0);
    }
 
