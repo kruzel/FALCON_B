@@ -273,6 +273,30 @@ int deinit()
         delete TradeController;
         TradeController = NULL;
       }
+
+   string str = "signal_";
+   int total = ObjectsTotal();
+    // Loop backwards to avoid skipping objects when deleting
+    for(int i = total - 1; i >= 0; i--)
+    {
+        string name = ObjectName(i);
+        if(StringFind(name, str) != -1)
+        {
+            ObjectDelete(name);
+        }
+    }
+
+    str = "peak_";
+    // Loop backwards to avoid skipping objects when deleting
+    for(int i = total - 1; i >= 0; i--)
+    {
+        string name = ObjectName(i);
+        if(StringFind(name, str) != -1)
+        {
+            ObjectDelete(name);
+        }
+    }
+    
 //----
    return(0);
   }
@@ -580,7 +604,7 @@ int start()
       else if(Take==2 && Take > PriceToLoZone - supplyDemandMarginPips * (PipFactor*Point))
       {
         Print("Take Profit is close to demand zone, adjusting Take Profit");
-        Stop = PriceToHiZone - supplyDemandMarginPips * (PipFactor*Point); // Adjust Stop Loss to be below the supply zone
+        Stop = PriceToLoZone - supplyDemandMarginPips * (PipFactor*Point); // Adjust Stop Loss to be below the supply zone
         Take = Stop * TpSlRatio; // Recalculate Take Profit based on adjusted Stop Loss
       }
     }
@@ -668,7 +692,7 @@ int start()
       return (0);
    }
 
-   if(Trigger==0 && BreakoutState!=BO_TRIGGERED && !IsAfterExit && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures)
+   if(BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
     {
         BreakoutState = BO_WAITING;
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
@@ -2565,17 +2589,18 @@ void VisualizeSignalOverlay(int i, int signal)
   //  string txt = "";
   int arrowCode = 0;
    color col = clrBlack;
-   double y_offset = 10*Point; // Small offset above/below close
+   double chartHigh = WindowPriceMax();
+   double chartLow = WindowPriceMin();
+   double chartRange = chartHigh - chartLow;
+   double y_offset = 2* chartRange * 0.02; // Use 2% of visible chart range as offset
    double y = 0;
 
    double maxVal = MathMax(Low[i], High[i]);
    double minVal = MathMin(Low[i], High[i]);
 
    switch(signal) {
-      // case 1:   txt = "(B)";  col = clrBlack;  y = maxVal + 8*y_offset; break;   
-      // case 2:   txt = "(S)";  col = clrBlack;   y = minVal - 4*y_offset; break; 
-      case 1:   arrowCode = 233;  col = clrBlack;  y = maxVal + 8*y_offset; break;   
-      case 2:   arrowCode = 234;  col = clrBlack;   y = minVal - 4*y_offset; break; 
+      case 1:   arrowCode = 233;  col = clrBlack;  y = maxVal + y_offset; break;   
+      case 2:   arrowCode = 234;  col = clrBlack;   y = minVal - y_offset; break; 
       
       default:  return; //              ObjectDelete("peak_" + IntegerToString(i)); return;
    }
@@ -2583,12 +2608,19 @@ void VisualizeSignalOverlay(int i, int signal)
   //  Print("VisualizeSignalOverlay: i=", i, " name=", name, ", y=", y);
 
    ObjectDelete(name);
-  //  ObjectCreate(name, OBJ_TEXT, 0, Time[i], y);
-  //  ObjectSetText(name, txt, 12, "Arial", col);
-   ObjectCreate(name, OBJ_ARROW, 0, Time[i], y);
-   ObjectSet(name, OBJPROP_STYLE, STYLE_SOLID);
-   ObjectSet(name, OBJPROP_ARROWCODE, arrowCode); // e.g., 233 for up, 234 for down
-   ObjectSet(name, OBJPROP_COLOR, col);
+   if(ObjectCreate(name, OBJ_ARROW, 0, Time[i], y))
+   {
+      ObjectSet(name, OBJPROP_CORNER, 0);
+      ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_CENTER);
+      ObjectSet(name, OBJPROP_STYLE, STYLE_SOLID);
+      ObjectSet(name, OBJPROP_ARROWCODE, arrowCode); // e.g., 233 for up, 234 for down
+      ObjectSet(name, OBJPROP_COLOR, col);
+   }
+   else
+   {
+      if(PAverbose) Print("Failed to create text object: ", name);
+   }
+   
 }
 
 //+------------------------------------------------------------------+
