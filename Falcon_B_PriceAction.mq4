@@ -135,7 +135,7 @@ extern int     zigzagBackstep                   = 3;        // ZigZag Backstep
 
 extern string  Header17="---------- Supply and Demand rules Variables-----------";
 extern bool    UseSupplyDemand                  = True;     // Use Supply and Demand Zones
-extern int     supplyDemandMarginPips            = 10;       // Supply and Demand threshold in Pips
+extern int     supplyDemandMarginPips            = 1;       // Supply and Demand threshold in Pips
 
 extern string  Header18="----------Trend rules Variables-----------";
 extern bool    UseReversal                        = True;     // Use Reversal 
@@ -417,15 +417,23 @@ int start()
       }
    }
 
+   double ner_hi_zone_P1 = -1;
+   double ner_hi_zone_P2 = -1;
+   double ner_lo_zone_P1 = -1;
+   double ner_lo_zone_P2 = -1;
+   int ner_hi_zone_strength = -1;
+   int ner_lo_zone_strength = -1;
+   int ner_price_inside_zone = -1;
+
    if(UseSupplyDemand)
    {
-      double ner_hi_zone_P1 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
-      double ner_hi_zone_P2 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 5, 0); // Get Supply Zone Low
-      double ner_lo_zone_P1 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 6, 0); // Get Demand Zone High
-      double ner_lo_zone_P2 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 7, 0); // Get Demand Zone Low
-      int ner_hi_zone_strength = (int)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 8, 0); // Get Supply Zone Strength
-      int ner_lo_zone_strength = (int)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 9, 0); // Get Demand Zone Strength
-      int ner_price_inside_zone = (int)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 10, 0); // Get Supply Zone Type
+      ner_hi_zone_P1 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
+      ner_hi_zone_P2 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 5, 0); // Get Supply Zone Low
+      ner_lo_zone_P1 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 6, 0); // Get Demand Zone High
+      ner_lo_zone_P2 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 7, 0); // Get Demand Zone Low
+      ner_hi_zone_strength = (int)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 8, 0); // Get Supply Zone Strength
+      ner_lo_zone_strength = (int)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 9, 0); // Get Demand Zone Strength
+      ner_price_inside_zone = (int)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 10, 0); // Get Supply Zone Type
 
       // Print("Supply Zone High: ", ner_hi_zone_P1, " Low: ", ner_hi_zone_P2, " Strength: ", ner_hi_zone_strength, " inside zone: ", ner_price_inside_zone);
       // Print("Demand Zone High: ", ner_lo_zone_P1, " Low: ", ner_lo_zone_P2, " Strength: ", ner_lo_zone_strength, " inside zone: ", ner_price_inside_zone);
@@ -553,6 +561,28 @@ int start()
     else 
     {
       Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,PipFactor);
+    }
+
+    // check if Take is close to supply or demand zone
+    if(UseSupplyDemand && Take > 0)
+    {
+      double PriceToHiZone = MathAbs(Close[1] - ner_hi_zone_P1);
+      double PriceToLoZone = MathAbs(Close[1] - ner_lo_zone_P2);
+
+      // Print("TP/Supply & Demand check, Price to Supply Zone: ", PriceToHiZone, " Price to Demand Zone: ", PriceToLoZone, " Take: ", Take* (PipFactor*Point), " supplyDemandMarginPips: ", supplyDemandMarginPips * (PipFactor*Point), " Point: ", Point);
+
+      if(Take==1 && Take > PriceToHiZone - supplyDemandMarginPips * (PipFactor*Point))
+      {
+        Print("Take Profit is close to supply zone, adjusting Take Profit");
+        Stop = PriceToHiZone - supplyDemandMarginPips * (PipFactor*Point); // Adjust Stop Loss to be below the supply zone
+        Take = Stop * TpSlRatio; // Recalculate Take Profit based on adjusted Stop Loss
+      }
+      else if(Take==2 && Take > PriceToLoZone - supplyDemandMarginPips * (PipFactor*Point))
+      {
+        Print("Take Profit is close to demand zone, adjusting Take Profit");
+        Stop = PriceToHiZone - supplyDemandMarginPips * (PipFactor*Point); // Adjust Stop Loss to be below the supply zone
+        Take = Stop * TpSlRatio; // Recalculate Take Profit based on adjusted Stop Loss
+      }
     }
 
    if(UseBreakevenStops) BreakevenStopAll(OnJournaling,RetryInterval,BreakevenBuffer,MagicNumber,PipFactor);
