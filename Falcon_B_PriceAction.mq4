@@ -165,6 +165,7 @@ int EntrySignal;
 
 CSupportResistance* SupportResistance;
 CTradingControl* TradeController;
+CPriceActionStates* PriceActionStates;
 
 int Trigger;
 int SRTriggered;
@@ -245,7 +246,8 @@ int init()
    if(UseVolTrailingStops) ArrayResize(VolTrailingList,MaxPositionsAllowed,0);
    if(UseHiddenVolTrailing) ArrayResize(HiddenVolTrailingList,MaxPositionsAllowed,0);
 
-   PaInit();
+   PriceActionStates = new CPriceActionStates();
+   PriceActionStates.Init();
    if(UseSupportResistance)
     SupportResistance = new CSupportResistance(SRmarginPips, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
 
@@ -264,7 +266,12 @@ int init()
 int deinit()
   {
 //----
-    PaDeinit(); // Deinitialize ZigZag indicator
+    if(PriceActionStates != NULL)
+      {
+        PriceActionStates.Deinit();
+        delete PriceActionStates;
+        PriceActionStates = NULL;
+      }
     if(UseSupportResistance)
       delete SupportResistance;
 
@@ -326,7 +333,7 @@ int start()
 
    OrderNumber=0; // OrderNumber used in Entry Rules
    Trigger = 0; // Reset trigger for entry/exit signals
-   PaResults paState = PaProcessBars(1);
+   PaResults paState = PriceActionStates.ProcessBars(1);
    if(UseSupportResistance)
     SupportResistance.SRUpdate(0); // Update for current bar
   
@@ -373,7 +380,7 @@ int start()
       if(paState.trendState == UP_TREND && BreakoutState == BO_WAITING)
       {
           if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPips*PipFactor*Point);
-          PriceActionState peaksState = GetPrevPeaks();
+          PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
           if(Close[1] > peaksState.peakCloseHighest + BreakoutMarginPips*PipFactor*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
           {
             // BreakoutState = BO_TRIGGERED; // set breakout flag
@@ -384,7 +391,7 @@ int start()
       else if(paState.trendState == DOWN_TREND && BreakoutState == BO_WAITING)
       {
           if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPips*PipFactor*Point);
-          PriceActionState peaksState = GetPrevPeaks();
+          PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
           if(Close[1] < peaksState.peakCloseLowest - BreakoutMarginPips*PipFactor*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
           {
             // BreakoutState = BO_TRIGGERED; // set breakout flag
@@ -688,7 +695,7 @@ int start()
 
    if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==True)
    {
-      if(OnJournaling) Print("Max positions reached, cannot open new trades.");
+      // if(OnJournaling) Print("Max positions reached, cannot open new trades.");
       return (0);
    }
 
@@ -2595,14 +2602,10 @@ void VisualizeSignalOverlay(int i, int signal)
    double y_offset = 2* chartRange * 0.02; // Use 2% of visible chart range as offset
    double y = 0;
 
-   double maxVal = MathMax(Low[i], High[i]);
-   double minVal = MathMin(Low[i], High[i]);
-
    switch(signal) {
-      case 1:   arrowCode = 233;  col = clrBlack;  y = maxVal + y_offset; break;   
-      case 2:   arrowCode = 234;  col = clrBlack;   y = minVal - y_offset; break; 
-      
-      default:  return; //              ObjectDelete("peak_" + IntegerToString(i)); return;
+      case 1:   arrowCode = 233;  col = clrGreen;  y = High[i] + 1.5*y_offset; break;   
+      case 2:   arrowCode = 234;  col = clrRed;   y = Low[i] - y_offset; break; 
+      default:  return; 
    }
    string name = "signal_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + string(arrowCode);
   //  Print("VisualizeSignalOverlay: i=", i, " name=", name, ", y=", y);
