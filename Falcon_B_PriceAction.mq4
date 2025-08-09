@@ -54,13 +54,13 @@ extern double  LossLimitPercent                 = 50;
 
 extern string  Header20="----------Breakout settings -----------";
 extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
-extern double  BreakoutMarginPoints               = 0.1; // Breakout Margin (Points)
+extern int     BreakoutMarginPoints             = 1; // Breakout Margin (Points)
 
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
 extern double  MinStopLossElseATR               = 5; // Minimum Stop Loss in Pips else ATR
-extern double  StopBarMargin                    = 10; // stop loss margin % of stop size
+extern double  StopBarMargin                    = 10; // stop loss margin (% bar size)
 
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
@@ -130,19 +130,22 @@ extern int     PipFinite_DowntrendBuffer        = 11;       // PipFinite Downtre
 
 extern string  Header16="----------Support Resistance rules settings-----------";
 extern bool    UseSupportResistance             = False;     // Use Support/Resistance Threshold
-extern double  SRmarginPoints                     = 0.1;       // Support/Resistance threshold (Points))
+extern int     SRmarginPoints                   = 1;       // Support/Resistance threshold (Points))
 extern int     zigzagDepth                      = 12;       // ZigZag Depth
 extern int     zigzagDeviation                  = 5;        // ZigZag Deviation
 extern int     zigzagBackstep                   = 3;        // ZigZag Backstep
 
 extern string  Header17="---------- Supply and Demand rules settings-----------";
 extern bool    UseSupplyDemand                  = True;     // Use Supply and Demand Zones
-extern double  supplyDemandMarginPoints         = 0.1;       // Supply / Demand margin (Points)
+extern int     supplyDemandMarginPoints         = 1;       // Supply / Demand margin (Points)
 
 extern string  Header18="----------Trend rules settings-----------";
 extern bool    UseReversal                      = True;     // Use Reversal 
 
-extern string  Header19="----------Trading time settings-----------";
+extern string  Header19="----------Mean reversal settings-----------";
+extern int     MeanReversalDistancePoints         = 2;       // Mean Reversal Distance (Points)
+
+extern string  Header21="----------Trading time settings-----------";
 extern int     TradingStartHour                 = 0;        // Start hour for trading (0-23)
 extern int     TradingEndHour                   = 23;       // End hour for trading (0-23)
 extern int     TradingStartMinute               = 0;        // Start minute for trading (0-59)
@@ -169,8 +172,14 @@ CSupportResistance* SupportResistance;
 CTradingControl* TradeController;
 CPriceActionStates* PriceActionStates;
 
+double prev_ner_hi_zone_P1 = -1;
+double prev_ner_hi_zone_P2 = -1;
+double prev_ner_lo_zone_P1 = -1;
+double prev_ner_lo_zone_P2 = -1;
+
 int Trigger;
 int SRTriggered;
+bool IsMeanReversal = false; // Flag for mean reversal condition
 
 enum BreakoutStates
 {
@@ -450,6 +459,38 @@ int start()
       }
    }
 
+   double pipFiniteLine = EMPTY_VALUE;
+   if(UsePipFiniteEntry)
+    {
+      // Get PipFinite indicator values with proper parameters
+      PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
+      PipFiniteDowntrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_DowntrendBuffer, 1); // Buffer for Downtrend, Shift 1
+      
+      if (PipFiniteUptrendSignal1 != EMPTY_VALUE && PipFiniteUptrendSignal1 != 0)
+        pipFiniteLine = PipFiniteUptrendSignal1;
+      else if (PipFiniteDowntrendSignal1 != EMPTY_VALUE  && PipFiniteDowntrendSignal1 != 0)
+        pipFiniteLine = PipFiniteDowntrendSignal1;
+      
+      if (pipFiniteLine != EMPTY_VALUE)
+      {
+        if(Trigger == 0) // don't use pip finite trigger if waiting for breakout
+        {
+          int CrossTriggeredPF = Crossed(Close[2], Close[1], pipFiniteLine); // Check if crossed the PipFinite line
+          if(CrossTriggeredPF == 1) // Buy signal after retracement
+            { 
+              Trigger = 1;
+              if(OnJournaling) Print("Entry Signal - BUY after PipFinite crossing");
+            }
+          else if(CrossTriggeredPF == 2) // Sell signal after retracement
+            {
+              Trigger = 2;
+              if(OnJournaling) Print("Entry Signal - SELL after PipFinite crossing");
+            }
+        }
+        
+      }
+    }  
+
    double ner_hi_zone_P1 = -1;
    double ner_hi_zone_P2 = -1;
    double ner_lo_zone_P1 = -1;
@@ -488,55 +529,45 @@ int start()
         // Print("Close[1]: ", Close[1], " ,hi P1 + margin: ", ner_hi_zone_P1 + BreakoutMarginPoints*Point, " ,hi P2 + margin: ", ner_hi_zone_P2 + BreakoutMarginPoints*Point);
         // Print("Close[1]: ", Close[1], " ,lo P1 - margin: ", ner_lo_zone_P1 - BreakoutMarginPoints*Point, " ,lo P2 - margin: ", ner_lo_zone_P2 - BreakoutMarginPoints*Point);
 
-        if((Close[1] > ner_hi_zone_P1 + BreakoutMarginPoints*Point && (peaksState.trendState == UP_TREND) && (peaksState.peakClose1 < ner_hi_zone_P1)) ||
-          (Close[1] > ner_hi_zone_P2 + BreakoutMarginPoints*Point && (peaksState.trendState == UP_TREND) && (peaksState.peakClose1 < ner_hi_zone_P2)))
+        if(peaksState.trendState == UP_TREND)
         {
-          BreakoutState = BO_TRIGGERED; // set breakout flag
-          Trigger = 1;
-          if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
+          if(((Close[1] > prev_ner_hi_zone_P1 + BreakoutMarginPoints*Point) && (peaksState.peakClose1 < prev_ner_hi_zone_P1)) ||
+            ((peaksState.trendState == UP_TREND) && (Close[1] > prev_ner_hi_zone_P2 + BreakoutMarginPoints*Point) &&  (peaksState.peakClose1 < prev_ner_hi_zone_P2)))
+          {
+            BreakoutState = BO_TRIGGERED; // set breakout flag
+            Trigger = 1;
+            if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
+          }
+          else if(Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point) // Check for mean reversal condition
+          {
+            IsMeanReversal = true; // Set flag for mean reversal condition
+            if(OnJournaling) Print("Mean Reversal Condition - SELL below demand line");
+            Trigger = 2; // Set trigger for mean reversal
+          }
         }
-        else if((Close[1] < ner_lo_zone_P2 - BreakoutMarginPoints*Point && (peaksState.trendState == DOWN_TREND) && (peaksState.peakClose1 > ner_lo_zone_P2)) ||
-           (Close[1] < ner_lo_zone_P1 - BreakoutMarginPoints*Point && (peaksState.trendState == DOWN_TREND) && (peaksState.peakClose1 > ner_lo_zone_P1)))
+        else if (peaksState.trendState == DOWN_TREND)
         {
-          BreakoutState = BO_TRIGGERED; // set breakout flag
-          Trigger = 2;
-          if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
-        } 
+          if (((Close[1] < prev_ner_lo_zone_P2 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P2)) ||
+            ((peaksState.trendState == DOWN_TREND) && (Close[1] < prev_ner_lo_zone_P1 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P1)))
+          {
+            BreakoutState = BO_TRIGGERED; // set breakout flag
+            Trigger = 2;
+            if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
+          } 
+          else if(Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point) // Check for mean reversal condition
+          {
+            IsMeanReversal = true; // Set flag for mean reversal condition
+            if(OnJournaling) Print("Mean Reversal Condition - BUY above supply line");
+            Trigger = 1; // Set trigger for mean reversal
+          }
+        }
       }
-   }
 
-   //----------PipFinite Entry signals-----------
-   double pipFiniteLine = EMPTY_VALUE;
-   if(UsePipFiniteEntry)
-    {
-      // Get PipFinite indicator values with proper parameters
-      PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
-      PipFiniteDowntrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_DowntrendBuffer, 1); // Buffer for Downtrend, Shift 1
-      
-      if (PipFiniteUptrendSignal1 != EMPTY_VALUE && PipFiniteUptrendSignal1 != 0)
-        pipFiniteLine = PipFiniteUptrendSignal1;
-      else if (PipFiniteDowntrendSignal1 != EMPTY_VALUE  && PipFiniteDowntrendSignal1 != 0)
-        pipFiniteLine = PipFiniteDowntrendSignal1;
-      
-      if (pipFiniteLine != EMPTY_VALUE)
-      {
-        if(Trigger == 0) // don't use pip finite trigger if waiting for breakout
-        {
-          int CrossTriggeredPF = Crossed(Close[2], Close[1], pipFiniteLine); // Check if crossed the PipFinite line
-          if(CrossTriggeredPF == 1) // Buy signal after retracement
-            { 
-              Trigger = 1;
-              if(OnJournaling) Print("Entry Signal - BUY after PipFinite crossing");
-            }
-          else if(CrossTriggeredPF == 2) // Sell signal after retracement
-            {
-              Trigger = 2;
-              if(OnJournaling) Print("Entry Signal - SELL after PipFinite crossing");
-            }
-        }
-        
-      }
-    }  
+      prev_ner_hi_zone_P1 = ner_hi_zone_P1;
+      prev_ner_hi_zone_P2 = ner_hi_zone_P2;
+      prev_ner_lo_zone_P1 = ner_lo_zone_P1;
+      prev_ner_lo_zone_P2 = ner_lo_zone_P2;
+   }
 
 //----------TP, SL, Breakeven and Trailing Stops Variables-----------
    
@@ -702,14 +733,14 @@ int start()
       return (0);
    }
 
-   if(BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
+   if(!IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
     {
         BreakoutState = BO_WAITING;
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
         return (0); // Exit without opening new trades
       }
 
-    if(UsePipFiniteEntry && !IsAfterExit) // pip finite rules apply only for new trades
+    if(UsePipFiniteEntry && !IsAfterExit && !IsMeanReversal) // pip finite rules apply only for new trades
     {
       if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
       {
@@ -748,6 +779,7 @@ int start()
    if(TradeAllowed && EntrySignal(Trigger)==1)
     { // Open Long Positions
       BreakoutState = BO_NORMAL; // Reset breakout flag
+      IsMeanReversal = false; // Reset mean reversal flag
       VisualizeSignalOverlay(1, Trigger);
 
       OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,Stop, PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
@@ -769,6 +801,7 @@ int start()
    if(TradeAllowed && EntrySignal(Trigger)==2)
     { // Open Short Positions
       BreakoutState = BO_NORMAL; // Reset breakout flag
+      IsMeanReversal = false; // Reset mean reversal flag
       VisualizeSignalOverlay(1, Trigger);
 
       OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,Stop,PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
