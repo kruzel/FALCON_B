@@ -538,11 +538,11 @@ int start()
             Trigger = 1;
             if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
           }
-          else if(Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point) // Check for mean reversal condition
+          else if(Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point) // Check for mean reversal condition
           {
             IsMeanReversal = true; // Set flag for mean reversal condition
-            if(OnJournaling) Print("Mean Reversal Condition - SELL below demand line");
-            Trigger = 2; // Set trigger for mean reversal
+            if(OnJournaling) Print("Mean Reversal Condition - BUY above supply line");
+            Trigger = 1; // Set trigger for mean reversal
           }
         }
         else if (peaksState.trendState == DOWN_TREND)
@@ -554,11 +554,11 @@ int start()
             Trigger = 2;
             if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
           } 
-          else if(Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point) // Check for mean reversal condition
+          else if(Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point) // Check for mean reversal condition
           {
             IsMeanReversal = true; // Set flag for mean reversal condition
-            if(OnJournaling) Print("Mean Reversal Condition - BUY above supply line");
-            Trigger = 1; // Set trigger for mean reversal
+            if(OnJournaling) Print("Mean Reversal Condition - SELL below demand line");
+            Trigger = 2; // Set trigger for mean reversal
           }
         }
       }
