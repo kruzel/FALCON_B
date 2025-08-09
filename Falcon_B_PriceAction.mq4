@@ -35,7 +35,7 @@ extern string  Header1="----------EA General Settings-----------";
 extern int     MagicNumber                      = 8118201;
 extern int     TerminalType                     = 1;         //0 mean slave, 1 mean master
 extern bool    R_Management                     = False;      //R_Management true will enable Decision Support Centre (using R)
-extern int     Slippage                         = 3; // Slippage in Pips
+extern int     Slippage                         = 0; // Slippage in Pips
 extern bool    IsECNbroker                      = False; // Is your broker an ECN
 extern bool    OnJournaling                     = True; // Add EA updates in the Journal Tab
 
@@ -47,6 +47,14 @@ extern int     MaxPositionsAllowed              = 1;
 extern double  MaxSpread                        = 50; // Maximum spread (Pips)
 extern bool    UseMaxSpreadATR                  = True;
 extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
+
+extern string  Header13="----------Set Max Loss Limit settings-----------";
+extern bool    IsLossLimitActivated             = False;
+extern double  LossLimitPercent                 = 50;
+
+extern string  Header20="----------Breakout settings -----------";
+extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
+extern double  BreakoutMarginPoints               = 0.1; // Breakout Margin (Points)
 
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
@@ -106,19 +114,13 @@ extern double  VolTrailingBuffMultiplier_Hidden = 0; // In units of ATR
 extern string  Header12="----------Volatility Measurement Settings-----------";
 extern int     atr_period                       = 5; // ATR period for volatility measurement
 
-extern string  Header13="----------Set Max Loss Limit-----------";
-extern bool    IsLossLimitActivated             = False;
-extern double  LossLimitPercent                 = 50;
-extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
-extern int     BreakoutMarginPips               = 1; // Margin in Pips to consider breakout
-
 extern string  Header14="----------Set Max Volatility Limit-----------";
 extern bool    IsVolLimitActivated              = False;
 extern double  VolatilityMultiplier             = 3; // In units of ATR
 extern int     ATRTimeframe                     = 60; // In minutes
 extern int     ATRPeriod                        = 14;
 
-extern string  Header15="----------PipFinite rules Variables-----------";
+extern string  Header15="----------PipFinite rules settings-----------";
 extern bool    UsePipFiniteEntry                = True;    // Use PipFinite Trend PRO
 extern int     PipFinite_Period                 = 3;       // PipFinite Trend PRO Period
 extern double  PipFinite_TargetFactor           = 2.0;     // PipFinite Trend PRO Target Factor
@@ -126,25 +128,25 @@ extern int     PipFinite_MaxHistoryBars         = 3000;    // PipFinite Trend PR
 extern int     PipFinite_UptrendBuffer          = 10;       // PipFinite Uptrend Buffer Number
 extern int     PipFinite_DowntrendBuffer        = 11;       // PipFinite Downtrend Buffer Number
 
-extern string  Header16="----------Support Resistance rules Variables-----------";
+extern string  Header16="----------Support Resistance rules settings-----------";
 extern bool    UseSupportResistance             = False;     // Use Support/Resistance Threshold
-extern int     SRmarginPips                     = 10;       // Support/Resistance threshold in Pips
+extern double  SRmarginPoints                     = 0.1;       // Support/Resistance threshold (Points))
 extern int     zigzagDepth                      = 12;       // ZigZag Depth
 extern int     zigzagDeviation                  = 5;        // ZigZag Deviation
 extern int     zigzagBackstep                   = 3;        // ZigZag Backstep
 
-extern string  Header17="---------- Supply and Demand rules Variables-----------";
+extern string  Header17="---------- Supply and Demand rules settings-----------";
 extern bool    UseSupplyDemand                  = True;     // Use Supply and Demand Zones
-extern int     supplyDemandMarginPips            = 1;       // Supply and Demand threshold in Pips
+extern double  supplyDemandMarginPoints         = 0.1;       // Supply / Demand margin (Points)
 
-extern string  Header18="----------Trend rules Variables-----------";
-extern bool    UseReversal                        = True;     // Use Reversal 
+extern string  Header18="----------Trend rules settings-----------";
+extern bool    UseReversal                      = True;     // Use Reversal 
 
-extern string  Header19="----------Trading time Variables-----------";
-extern int     TradingStartHour                   = 0;        // Start hour for trading (0-23)
-extern int     TradingEndHour                     = 23;       // End hour for trading (0-23)
-extern int     TradingStartMinute                 = 0;        // Start minute for trading (0-59)
-extern int     TradingEndMinute                   = 59;       // End minute for trading (0-59)
+extern string  Header19="----------Trading time settings-----------";
+extern int     TradingStartHour                 = 0;        // Start hour for trading (0-23)
+extern int     TradingEndHour                   = 23;       // End hour for trading (0-23)
+extern int     TradingStartMinute               = 0;        // Start minute for trading (0-59)
+extern int     TradingEndMinute                 = 59;       // End minute for trading (0-59)
 
 string  InternalHeader1="----------Errors Handling Settings-----------";
 int     RetryInterval                           = 100; // Pause Time before next retry (in milliseconds)
@@ -249,7 +251,7 @@ int init()
    PriceActionStates = new CPriceActionStates();
    PriceActionStates.Init();
    if(UseSupportResistance)
-    SupportResistance = new CSupportResistance(SRmarginPips, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
+    SupportResistance = new CSupportResistance(SRmarginPoints, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
 
     TradeController = new CTradingControl();
     TradeController.CreateButton();
@@ -377,28 +379,28 @@ int start()
       }
 
       //check breakout
-      if(paState.trendState == UP_TREND && BreakoutState == BO_WAITING)
-      {
-          if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPips*PipFactor*Point);
-          PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
-          if(Close[1] > peaksState.peakCloseHighest + BreakoutMarginPips*PipFactor*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
-          {
-            // BreakoutState = BO_TRIGGERED; // set breakout flag
-            Trigger = 1; // Buy signal
-            if(OnJournaling) Print("Entry Signal - BUY on breakout");
-          }
-      }
-      else if(paState.trendState == DOWN_TREND && BreakoutState == BO_WAITING)
-      {
-          if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPips*PipFactor*Point);
-          PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
-          if(Close[1] < peaksState.peakCloseLowest - BreakoutMarginPips*PipFactor*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
-          {
-            // BreakoutState = BO_TRIGGERED; // set breakout flag
-            Trigger = 2; // Sell signal
-            if(OnJournaling) Print("Entry Signal - SELL on breakout");
-          }
-      }
+      // if(paState.trendState == UP_TREND && BreakoutState == BO_WAITING)
+      // {
+      //     // if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPoints*Point);
+      //     PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
+      //     if(Close[1] > peaksState.peakCloseHighest + BreakoutMarginPoints*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
+      //     {
+      //       BreakoutState = BO_TRIGGERED; // set breakout flag
+      //       Trigger = 1; // Buy signal
+      //       if(OnJournaling) Print("Entry Signal - BUY on breakout");
+      //     }
+      // }
+      // else if(paState.trendState == DOWN_TREND && BreakoutState == BO_WAITING)
+      // {
+      //     // if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPoints*Point);
+      //     PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
+      //     if(Close[1] < peaksState.peakCloseLowest - BreakoutMarginPoints*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
+      //     {
+      //       BreakoutState = BO_TRIGGERED; // set breakout flag
+      //       Trigger = 2; // Sell signal
+      //       if(OnJournaling) Print("Entry Signal - SELL on breakout");
+      //     }
+      // }
     }
 
    if(UseReversal)
@@ -469,32 +471,36 @@ int start()
       // Print("Supply Zone High: ", ner_hi_zone_P1, " Low: ", ner_hi_zone_P2, " Strength: ", ner_hi_zone_strength, " inside zone: ", ner_price_inside_zone);
       // Print("Demand Zone High: ", ner_lo_zone_P1, " Low: ", ner_lo_zone_P2, " Strength: ", ner_lo_zone_strength, " inside zone: ", ner_price_inside_zone);
 
-      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (Close[1] < ner_lo_zone_P2) && (Close[1] > ner_lo_zone_P2 - supplyDemandMarginPips * (PipFactor*Point)))
+      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (Close[1] < ner_lo_zone_P2) && (Close[1] > ner_lo_zone_P2 - supplyDemandMarginPoints * Point))
       { 
         Trigger = 2;
         if(OnJournaling) Print("Exit Signal - SELL below supply and demand line");
       }
-      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (Close[1] > ner_hi_zone_P1) && (Close[1] < ner_hi_zone_P1 + supplyDemandMarginPips * (PipFactor*Point)))
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (Close[1] > ner_hi_zone_P1) && (Close[1] < ner_hi_zone_P1 + supplyDemandMarginPoints * Point))
       {
           Trigger = 1;
           if(OnJournaling) Print("Exit Signal - BUY above supply and demand line");
       } 
       else
       { //if there are no open position, check for entry signal
-        if((Close[1] > ner_hi_zone_P1 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P1) ||
-           (Close[1] > ner_hi_zone_P2 + BreakoutMarginPips*PipFactor*Point && Close[2] < ner_hi_zone_P2))
+        PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
+        // Print("trend state: ", peaksState.trendState, " ,peaksState.peakState1: ", peaksState.peakState1, " ,peaksState.peakClose1: ", peaksState.peakClose1);
+        // Print("Close[1]: ", Close[1], " ,hi P1 + margin: ", ner_hi_zone_P1 + BreakoutMarginPoints*Point, " ,hi P2 + margin: ", ner_hi_zone_P2 + BreakoutMarginPoints*Point);
+        // Print("Close[1]: ", Close[1], " ,lo P1 - margin: ", ner_lo_zone_P1 - BreakoutMarginPoints*Point, " ,lo P2 - margin: ", ner_lo_zone_P2 - BreakoutMarginPoints*Point);
+
+        if((Close[1] > ner_hi_zone_P1 + BreakoutMarginPoints*Point && (peaksState.trendState == UP_TREND) && (peaksState.peakClose1 < ner_hi_zone_P1)) ||
+          (Close[1] > ner_hi_zone_P2 + BreakoutMarginPoints*Point && (peaksState.trendState == UP_TREND) && (peaksState.peakClose1 < ner_hi_zone_P2)))
         {
           BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 1;
           if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
         }
-        else if((Close[1] < ner_lo_zone_P2 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P2) ||
-           (Close[1] < ner_lo_zone_P1 - BreakoutMarginPips*PipFactor*Point && Close[2] > ner_lo_zone_P1))
+        else if((Close[1] < ner_lo_zone_P2 - BreakoutMarginPoints*Point && (peaksState.trendState == DOWN_TREND) && (peaksState.peakClose1 > ner_lo_zone_P2)) ||
+           (Close[1] < ner_lo_zone_P1 - BreakoutMarginPoints*Point && (peaksState.trendState == DOWN_TREND) && (peaksState.peakClose1 > ner_lo_zone_P1)))
         {
           BreakoutState = BO_TRIGGERED; // set breakout flag
           Trigger = 2;
           if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
-        
         } 
       }
    }
@@ -597,22 +603,19 @@ int start()
     // check if Take is close to supply or demand zone
     if(UseSupplyDemand && Take > 0)
     {
-      double PriceToHiZone = MathAbs(Close[1] - ner_hi_zone_P1);
-      double PriceToLoZone = MathAbs(Close[1] - ner_lo_zone_P2);
-
-      // Print("TP/Supply & Demand check, Price to Supply Zone: ", PriceToHiZone, " Price to Demand Zone: ", PriceToLoZone, " Take: ", Take* (PipFactor*Point), " supplyDemandMarginPips: ", supplyDemandMarginPips * (PipFactor*Point), " Point: ", Point);
-
-      if(Take==1 && Take > PriceToHiZone - supplyDemandMarginPips * (PipFactor*Point))
+      if(Take==1)
       {
-        Print("Take Profit is close to supply zone, adjusting Take Profit");
-        Stop = PriceToHiZone - supplyDemandMarginPips * (PipFactor*Point); // Adjust Stop Loss to be below the supply zone
-        Take = Stop * TpSlRatio; // Recalculate Take Profit based on adjusted Stop Loss
+        if(Take > MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point) //P2 is the lower bound of the supply zone
+        {
+          Print("Take Profit is close to supply zone, adjusting Take Profit");
+          Take = MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point; // Adjust Take Profit to be below the supply zone
+        }
+        
       }
-      else if(Take==2 && Take > PriceToLoZone - supplyDemandMarginPips * (PipFactor*Point))
+      else if(Take==2 && Take > MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point) // P1 is the upper bound of the demand zone
       {
         Print("Take Profit is close to demand zone, adjusting Take Profit");
-        Stop = PriceToLoZone - supplyDemandMarginPips * (PipFactor*Point); // Adjust Stop Loss to be below the supply zone
-        Take = Stop * TpSlRatio; // Recalculate Take Profit based on adjusted Stop Loss
+        Take = MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point; // Adjust Take Profit to be below the demand zone
       }
     }
 
@@ -915,14 +918,16 @@ double GetLot(bool IsSizingOnTrigger ,double FixedLots ,double riskPercent ,doub
       double accountBalance = AccountBalance(); // Your total account balance
       double riskAmount = accountBalance * riskPercent / 100.0; // The maximum money to risk on this trade
       
-      // Pip value per lot for the symbol
+      // Calculate pip value for 1 lot
       double tickValue = MarketInfo(Symbol(), MODE_TICKVALUE);
-      double tickSize = MarketInfo(Symbol(), MODE_TICKSIZE);
-      double pipValue = tickValue / tickSize; // Value of 1 pip for 1 lot
+      double pipValue = tickValue * K; // Value of 1 pip for 1 lot (adjusted for broker digits)
       
-      // Lot size calculation based on risk and stop loss
-      output = riskAmount / (stopLossPips * pipValue * Point);
-      // Print("output: ", output, " riskAmount: ", riskAmount, " stopLossPips: ", stopLossPips, " Point: ", Point);
+      // Calculate lot size: Risk Amount = Volume × Stop Loss × Pip Value
+      // Therefore: Volume = Risk Amount / (Stop Loss × Pip Value)
+      output = riskAmount / (stopLossPips * pipValue);
+      
+      // Apply adjustment factor (for Yen pairs) before normalizing
+      output = output * AdjustmentFactor;
       
       // Normalize lot to nearest allowed step
       double lotStep = MarketInfo(Symbol(), MODE_LOTSTEP);
@@ -932,15 +937,25 @@ double GetLot(bool IsSizingOnTrigger ,double FixedLots ,double riskPercent ,doub
       // Adjust lot size within broker limits
       output = MathFloor(output / lotStep) * lotStep;
 
-      if (output <= minLot) output = 0; // Can't trade less than minimum
-      if (output >= maxLot) output = maxLot;
+      if (output < minLot) output = minLot; // Use minimum lot if calculated is too small
+      if (output > maxLot) output = maxLot; // Cap at maximum lot
+      
+      // Verify that max loss doesn't exceed risk amount
+      double calculatedMaxLoss = output * stopLossPips * pipValue;
+      if (calculatedMaxLoss > riskAmount)
+      {
+        // Recalculate to ensure we don't exceed risk
+        output = riskAmount / (stopLossPips * pipValue);
+        output = output * AdjustmentFactor;
+        output = MathFloor(output / lotStep) * lotStep;
+        if (output < minLot) output = 0; // Can't trade if risk is too small for minimum lot
+      }
     } 
     else {
       output=FixedLots;
      }
 
    output=NormalizeDouble(output,2); // Round to 2 decimal place
-   output=output*AdjustmentFactor; // for Yen 100
 
    return(output);
   }
@@ -1057,16 +1072,16 @@ int OpenPositionMarket(int TYPE,double LOT,double SL,double TP,int Magic,int Sli
    string symbol=Symbol();
    int cmd=TYPE;
    double volume=LOT; //CheckLot(LOT,Journaling);
-   if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume>AccountFreeMargin())
+   if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume > AccountFreeMargin())
      {
-      Print("Can not open a trade. Not enough free margin to open "+(string)volume+" on "+symbol, " margin required: ", MarketInfo(symbol,MODE_MARGINREQUIRED), " volume: ", volume, " free margin: ", AccountFreeMargin());
+      Print("Can not open a trade. Not enough free margin to open "+(string)volume+" on "+symbol, ", margin required: ", MarketInfo(symbol,MODE_MARGINREQUIRED), " volume: ", volume, " free margin: ", AccountFreeMargin());
       return(-1);
      }
    int slippage=Slip*K; // Slippage is in points. 1 point = 0.0001 on 4 digit broker and 0.00001 on a 5 digit broker
    string comment=" "+(string)TYPE+"(#"+(string)Magic+")";
    int magic=Magic;
    datetime expiration=0;
-   color arrow_color=0;if(TYPE==OP_BUY)arrow_color=Blue;if(TYPE==OP_SELL)arrow_color=Green;
+   color arrow_color=0;if(TYPE==OP_BUY)arrow_color=Blue;if(TYPE==OP_SELL)arrow_color=Red;
    double stoploss=0;
    double takeprofit=0;
    double initTP = TP;
