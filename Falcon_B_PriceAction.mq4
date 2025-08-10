@@ -180,6 +180,7 @@ double prev_ner_lo_zone_P2 = -1;
 int Trigger;
 int SRTriggered;
 bool IsMeanReversal = false; // Flag for mean reversal condition
+double lastOrderProfit = 0;
 
 enum BreakoutStates
 {
@@ -326,7 +327,32 @@ int deinit()
 //+------------------------------------------------------------------+
 int start()
   {
-    if(!isNewBar())
+    Trigger = 0; // Reset trigger for entry/exit signals
+
+    // If there are no open positions and we found a losing trade in history
+    if(lastOrderProfit == 0)
+    {
+      double profit;
+      int type;
+      if(GetBarProfitByTime(TimeCurrent(), MagicNumber, profit, type) && profit < 0) // Check if there was a losing trade
+      {
+        if(type==OP_BUY)
+        {
+          // Last trade was a losing buy, trigger a sell
+          Trigger = 2;
+          if(OnJournaling) Print("Entry Signal - SELL after losing BUY trade");
+        }
+        else if(type==OP_SELL) 
+        {
+          // Last trade was a losing sell, trigger a buy
+          Trigger = 1;
+          if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
+        }
+        lastOrderProfit = profit; // Store the last order profit
+      }
+    }
+
+    if(!isNewBar() && lastOrderProfit == 0)
       return (0);
 //----------Order management through R - to avoid slow down the system only enable with external parameters
    if(R_Management)
@@ -341,9 +367,8 @@ int start()
        
      }
 //----------Variables to be Refreshed-----------
-
+   lastOrderProfit = 0;
    OrderNumber=0; // OrderNumber used in Entry Rules
-   Trigger = 0; // Reset trigger for entry/exit signals
    PaResults paState = PriceActionStates.ProcessBars(1);
    if(UseSupportResistance)
     SupportResistance.SRUpdate(0); // Update for current bar
@@ -538,7 +563,7 @@ int start()
             Trigger = 1;
             if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
           }
-          else if(Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point) // Check for mean reversal condition
+          else if(Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point || Close[2] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point) // Check for mean reversal condition
           {
             IsMeanReversal = true; // Set flag for mean reversal condition
             if(OnJournaling) Print("Mean Reversal Condition - BUY above supply line");
@@ -554,7 +579,7 @@ int start()
             Trigger = 2;
             if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
           } 
-          else if(Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point) // Check for mean reversal condition
+          else if(Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point || Close[2] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point) // Check for mean reversal condition
           {
             IsMeanReversal = true; // Set flag for mean reversal condition
             if(OnJournaling) Print("Mean Reversal Condition - SELL below demand line");
