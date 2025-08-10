@@ -180,7 +180,7 @@ double prev_ner_lo_zone_P2 = -1;
 int Trigger;
 int SRTriggered;
 bool IsMeanReversal = false; // Flag for mean reversal condition
-double lastOrderProfit = 0;
+bool lastOrderClosedByStopLoss = false;
 
 enum BreakoutStates
 {
@@ -330,7 +330,7 @@ int start()
     Trigger = 0; // Reset trigger for entry/exit signals
 
     // If there are no open positions and we found a losing trade in history
-    if(lastOrderProfit == 0)
+    if(!lastOrderClosedByStopLoss)
     {
       double profit;
       int type;
@@ -348,11 +348,11 @@ int start()
           Trigger = 1;
           if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
         }
-        lastOrderProfit = profit; // Store the last order profit
+        lastOrderClosedByStopLoss = true; // Store the last order profit
       }
     }
 
-    if(!isNewBar() && lastOrderProfit == 0)
+    if(!isNewBar() && !lastOrderClosedByStopLoss)
       return (0);
 //----------Order management through R - to avoid slow down the system only enable with external parameters
    if(R_Management)
@@ -608,7 +608,7 @@ int start()
         {
           Stop=(Ask - MathMin(Low[1],High[1]))/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          if(lastOrderProfit==0) // skip check if last order closed by stop loss
+          if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
           {
             if(Stop<MinStopLossElseATR) // If the last bar is a Doji
             {
@@ -626,7 +626,7 @@ int start()
         { // Sell
           Stop=(MathMax(Low[1],High[1])-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          if(lastOrderProfit==0) // skip check if last order closed by stop loss
+          if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
           {
             if(Stop<MinStopLossElseATR) // If the last bar is a Doji
             {
@@ -763,14 +763,14 @@ int start()
       return (0);
    }
 
-   if(lastOrderProfit==0 && !IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
+   if(!lastOrderClosedByStopLoss && !IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
     {
         BreakoutState = BO_WAITING;
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
         return (0); // Exit without opening new trades
       }
 
-    if(lastOrderProfit==0 && UsePipFiniteEntry && !IsAfterExit && !IsMeanReversal) // pip finite rules apply only for new trades
+    if(!lastOrderClosedByStopLoss && UsePipFiniteEntry && !IsAfterExit && !IsMeanReversal) // pip finite rules apply only for new trades
     {
       if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
       {
@@ -859,7 +859,7 @@ int start()
 //----
 
     // reset states variables
-    lastOrderProfit = 0;
+    lastOrderClosedByStopLoss = false;
 
    return(0);
   }
