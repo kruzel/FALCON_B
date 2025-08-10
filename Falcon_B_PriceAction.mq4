@@ -59,7 +59,7 @@ extern int     BreakoutMarginPoints             = 1; // Breakout Margin (Points)
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
-extern double  MinStopLossElseATR               = 5; // Minimum Stop Loss in Pips else ATR
+extern double  MinStopLoss                      = 1; // Minimum Stop Loss in Pips else ATR
 extern double  StopBarMargin                    = 10; // stop loss margin (% bar size)
 
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
@@ -143,7 +143,7 @@ extern string  Header18="----------Trend rules settings-----------";
 extern bool    UseReversal                      = True;     // Use Reversal 
 
 extern string  Header19="----------Mean reversal settings-----------";
-extern int     MeanReversalDistancePoints         = 2;       // Mean Reversal Distance (Points)
+extern int     MeanReversalDistancePoints         = 5;       // Mean Reversal Distance (Points)
 
 extern string  Header21="----------Trading time settings-----------";
 extern int     TradingStartHour                 = 0;        // Start hour for trading (0-23)
@@ -328,6 +328,8 @@ int deinit()
 int start()
   {
     Trigger = 0; // Reset trigger for entry/exit signals
+    lastOrderClosedByStopLoss = false;
+    IsMeanReversal = false;
 
     // If there are no open positions and we found a losing trade in history
     if(!lastOrderClosedByStopLoss)
@@ -387,7 +389,7 @@ int start()
    
    //----------Entry & Exit rules -----------
 
-   if(CountPosOrders(MagicNumber,-1) == 0)
+   if(CountPosOrders(MagicNumber,-1) == 0 && !lastOrderClosedByStopLoss)
     {
       // check continuation after retracement
       if(paState.prevTrendState == UP_TREND_RETRACEMENT && paState.trendState == UP_TREND && BreakoutState!=BO_WAITING)
@@ -436,7 +438,7 @@ int start()
       // }
     }
 
-   if(UseReversal)
+   if(UseReversal && lastOrderClosedByStopLoss)
    {
       if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (paState.trendState == DOWN_TREND || IsBearishPinBar(1)))
       {
@@ -451,7 +453,7 @@ int start()
    } 
       
    // support resistance exit rules
-   if(UseSupportResistance)
+   if(UseSupportResistance && !lastOrderClosedByStopLoss)
    {
       SRresult SRres = SupportResistance.CheckNearSR(Close[1], paState.trendState);
       if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (SRres.status == BELOW_RESISTANCE || SRres.status == BELOW_SUPPORT))
@@ -484,7 +486,7 @@ int start()
    }
 
    double pipFiniteLine = EMPTY_VALUE;
-   if(UsePipFiniteEntry)
+   if(UsePipFiniteEntry && !lastOrderClosedByStopLoss)
     {
       // Get PipFinite indicator values with proper parameters
       PipFiniteUptrendSignal1 = iCustom(NULL, 0, "Market\\PipFinite Trend PRO", PipFinite_UptrendBuffer, 1); // Buffer for Uptrend, Shift 1
@@ -523,7 +525,7 @@ int start()
    int ner_lo_zone_strength = -1;
    int ner_price_inside_zone = -1;
 
-   if(UseSupplyDemand)
+   if(UseSupplyDemand && !lastOrderClosedByStopLoss)
    {
       ner_hi_zone_P1 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
       ner_hi_zone_P2 = (double)iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 5, 0); // Get Supply Zone Low
@@ -546,7 +548,7 @@ int start()
           Trigger = 1;
           if(OnJournaling) Print("Exit Signal - BUY above supply and demand line");
       } 
-      else
+      else 
       { //if there are no open position, check for entry signal
         PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
         // Print("trend state: ", peaksState.trendState, " ,peaksState.peakState1: ", peaksState.peakState1, " ,peaksState.peakClose1: ", peaksState.peakClose1);
@@ -608,9 +610,10 @@ int start()
         {
           Stop=(Ask - MathMin(Low[1],High[1]))/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
+          // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
+          Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
           {
-            if(Stop<MinStopLossElseATR) // If the last bar is a Doji
+            if(Stop<MinStopLoss) 
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               Print("Stop too small, using ATR for Stop Loss: ", Stop);
@@ -626,9 +629,10 @@ int start()
         { // Sell
           Stop=(MathMax(Low[1],High[1])-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
+          // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
+          Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
           {
-            if(Stop<MinStopLossElseATR) // If the last bar is a Doji
+            if(Stop<MinStopLoss) 
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               Print("Stop too small, using ATR for Stop Loss: ", Stop);
@@ -763,7 +767,7 @@ int start()
       return (0);
    }
 
-   if(!lastOrderClosedByStopLoss && !IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
+   if(!IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
     {
         BreakoutState = BO_WAITING;
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
