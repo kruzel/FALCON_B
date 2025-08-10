@@ -608,30 +608,36 @@ int start()
         {
           Stop=(Ask - MathMin(Low[1],High[1]))/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          if(Stop<MinStopLossElseATR) // If the last bar is a Doji
+          if(lastOrderProfit==0) // skip check if last order closed by stop loss
           {
-            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-            Print("Stop too small, using ATR for Stop Loss: ", Stop);
-          } 
-          else if(Stop>2*myATR) // If the stop is too large, use ATR
-          {
-            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-            Print("Stop is too large, using ATR for Stop Loss: ", Stop);
+            if(Stop<MinStopLossElseATR) // If the last bar is a Doji
+            {
+              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+              Print("Stop too small, using ATR for Stop Loss: ", Stop);
+            } 
+            else if(Stop>2*myATR) // If the stop is too large, use ATR
+            {
+              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+              Print("Stop is too large, using ATR for Stop Loss: ", Stop);
+            }
           }
         } 
         else if(Trigger==2) 
         { // Sell
           Stop=(MathMax(Low[1],High[1])-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          if(Stop<MinStopLossElseATR) // If the last bar is a Doji
+          if(lastOrderProfit==0) // skip check if last order closed by stop loss
           {
-            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-            Print("Stop too small, using ATR for Stop Loss: ", Stop);
-          }
-          else if(Stop>2*myATR) // If the stop is too large, use ATR
-          {
-            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-            Print("Stop is too large, using ATR for Stop Loss: ", Stop);
+            if(Stop<MinStopLossElseATR) // If the last bar is a Doji
+            {
+              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+              Print("Stop too small, using ATR for Stop Loss: ", Stop);
+            }
+            else if(Stop>2*myATR) // If the stop is too large, use ATR
+            {
+              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+              Print("Stop is too large, using ATR for Stop Loss: ", Stop);
+            }
           }
         }
     } else
@@ -757,14 +763,14 @@ int start()
       return (0);
    }
 
-   if(!lastOrderProfit<0 && !IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
+   if(lastOrderProfit==0 && !IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
     {
         BreakoutState = BO_WAITING;
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
         return (0); // Exit without opening new trades
       }
 
-    if(!lastOrderProfit<0 && UsePipFiniteEntry && !IsAfterExit && !IsMeanReversal) // pip finite rules apply only for new trades
+    if(lastOrderProfit==0 && UsePipFiniteEntry && !IsAfterExit && !IsMeanReversal) // pip finite rules apply only for new trades
     {
       if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
       {
