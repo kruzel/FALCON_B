@@ -367,7 +367,6 @@ int start()
        
      }
 //----------Variables to be Refreshed-----------
-   lastOrderProfit = 0;
    OrderNumber=0; // OrderNumber used in Entry Rules
    PaResults paState = PriceActionStates.ProcessBars(1);
    if(UseSupportResistance)
@@ -758,14 +757,14 @@ int start()
       return (0);
    }
 
-   if(!IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
+   if(!lastOrderProfit<0 && !IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
     {
         BreakoutState = BO_WAITING;
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
         return (0); // Exit without opening new trades
       }
 
-    if(UsePipFiniteEntry && !IsAfterExit && !IsMeanReversal) // pip finite rules apply only for new trades
+    if(!lastOrderProfit<0 && UsePipFiniteEntry && !IsAfterExit && !IsMeanReversal) // pip finite rules apply only for new trades
     {
       if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
       {
@@ -852,6 +851,9 @@ int start()
    */
 
 //----
+
+    // reset states variables
+    lastOrderProfit = 0;
 
    return(0);
   }
