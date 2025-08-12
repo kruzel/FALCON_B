@@ -812,10 +812,6 @@ int start()
 
    if(TradeAllowed && EntrySignal(Trigger)==1)
     { // Open Long Positions
-      BreakoutState = BO_NORMAL; // Reset breakout flag
-      IsMeanReversal = false; // Reset mean reversal flag
-      VisualizeSignalOverlay(1, Trigger);
-
       OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,Stop, PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Set Stop Loss value for Hidden SL
@@ -830,14 +826,14 @@ int start()
       // Set Hidden Volatility Trailing Stop Level 
       if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,PipFactor,OrderNumber);
     
+      BreakoutState = BO_NORMAL; // Reset breakout flag
+      IsMeanReversal = false; // Reset mean reversal flag
+      VisualizeSignalOverlay(1, Trigger);
+      // SaveChart();
     }
 
    if(TradeAllowed && EntrySignal(Trigger)==2)
     { // Open Short Positions
-      BreakoutState = BO_NORMAL; // Reset breakout flag
-      IsMeanReversal = false; // Reset mean reversal flag
-      VisualizeSignalOverlay(1, Trigger);
-
       OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,Stop,PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Set Stop Loss value for Hidden SL
@@ -851,7 +847,11 @@ int start()
       
       // Set Hidden Volatility Trailing Stop Level  
       if(UseHiddenVolTrailing) SetHiddenVolTrailing(OnJournaling,myATR,VolTrailingDistMultiplier_Hidden,MagicNumber,PipFactor,OrderNumber);
-    
+      
+      BreakoutState = BO_NORMAL; // Reset breakout flag
+      IsMeanReversal = false; // Reset mean reversal flag
+      VisualizeSignalOverlay(1, Trigger);
+      // SaveChart();
     }
            
 
@@ -2727,4 +2727,19 @@ void OnChartEvent(const int id,
             TradeController.CheckButtonClick();
         }
     }
+}
+
+void SaveChart()
+{
+  string images_folder = "C:\\fin\\Metatrader_Debug";
+  string time_str = TimeToStr(TimeCurrent(), TIME_DATE|TIME_MINUTES);
+  time_str = StringReplace(time_str, ":", "-");
+  string filename = images_folder + "\\ScreenShot_" + Symbol() + "_" + time_str + ".png";
+  Print("Saving chart screenshot to: ", filename);
+
+  int width = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0);
+  int height = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, 0);
+  bool success = ChartScreenShot(0, filename, width, height);
+  if(!success)
+    Print("Screenshot failed: ", GetLastError());
 }
