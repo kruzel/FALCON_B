@@ -103,12 +103,12 @@ extern double  TrailingStopBuffer_Hidden        = 0; // In pips
 
 extern string  Header10="----------Volatility Trailing Stops Settings-----------";
 extern bool    UseVolTrailingStops              = False;
-extern double  VolTrailingDistMultiplier        = 0; // In units of ATR
-extern double  VolTrailingBuffMultiplier        = 0; // In units of ATR
+extern double  VolTrailingDistMultiplier        = 0; // Trailing distance In units of ATR
+extern double  VolTrailingBuffMultiplier        = 0; // Trailing buffer In units of ATR
 
 extern string  Header11="----------Hidden Volatility Trailing Stops Settings-----------";
 extern bool    UseHiddenVolTrailing             = False;
-extern double  VolTrailingDistMultiplier_Hidden = 0; // In units of ATR
+extern double  VolTrailingDistMultiplier_Hidden = 0; // Trailing distance In units of ATR
 extern double  VolTrailingBuffMultiplier_Hidden = 0; // In units of ATR
 
 extern string  Header12="----------Volatility Measurement Settings-----------";
@@ -354,6 +354,30 @@ int start()
       }
     }
 
+    //----------TP, SL, Breakeven and Trailing Stops Variables-----------
+   if(UseBreakevenStops) BreakevenStopAll(OnJournaling,RetryInterval,BreakevenBuffer,MagicNumber,PipFactor);
+   if(UseTrailingStops) TrailingStopAll(OnJournaling,TrailingStopDistance,TrailingStopBuffer,RetryInterval,MagicNumber,PipFactor);
+   if(UseVolTrailingStops) {
+      UpdateVolTrailingList(OnJournaling,RetryInterval,MagicNumber);
+      ReviewVolTrailingStop(OnJournaling,VolTrailingDistMultiplier,VolTrailingBuffMultiplier,RetryInterval,MagicNumber,PipFactor);
+   }
+//----------(Hidden) TP, SL, Breakeven and Trailing Stops Variables-----------  
+
+   if(UseHiddenStopLoss) TriggerStopLossHidden(OnJournaling,RetryInterval,MagicNumber,Slippage,PipFactor);
+   if(UseHiddenTakeProfit) TriggerTakeProfitHidden(OnJournaling,RetryInterval,MagicNumber,Slippage,PipFactor);
+   if(UseHiddenBreakevenStops) { 
+      UpdateHiddenBEList(OnJournaling,RetryInterval,MagicNumber);
+      SetAndTriggerBEHidden(OnJournaling,BreakevenBuffer,MagicNumber,Slippage,PipFactor,RetryInterval);
+   }
+   if(UseHiddenTrailingStops) {
+      UpdateHiddenTrailingList(OnJournaling,RetryInterval,MagicNumber);
+      SetAndTriggerHiddenTrailing(OnJournaling,TrailingStopDistance_Hidden,TrailingStopBuffer_Hidden,Slippage,RetryInterval,MagicNumber,PipFactor);
+   }
+   if(UseHiddenVolTrailing) {
+      UpdateHiddenVolTrailingList(OnJournaling,RetryInterval,MagicNumber);
+      TriggerAndReviewHiddenVolTrailing(OnJournaling,VolTrailingDistMultiplier_Hidden,VolTrailingBuffMultiplier_Hidden,Slippage,RetryInterval,MagicNumber,PipFactor);
+   }
+
     if(!isNewBar() && !lastOrderClosedByStopLoss)
       return (0);
 //----------Order management through R - to avoid slow down the system only enable with external parameters
@@ -368,8 +392,7 @@ int start()
         
        
      }
-//----------Variables to be Refreshed-----------
-   OrderNumber=0; // OrderNumber used in Entry Rules
+//----------states update-----------
    PaResults paState = PriceActionStates.ProcessBars(1);
    if(UseSupportResistance)
     SupportResistance.SRUpdate(0); // Update for current bar
@@ -380,6 +403,35 @@ int start()
         return (0);
       } 
 
+    if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
+    {
+      datetime localTime = TimeLocal();
+      int currentHour = TimeHour(localTime);
+      int currentMinute = TimeMinute(localTime);
+
+      bool isBeforeStart = (currentHour < TradingStartHour) || (currentHour == TradingStartHour && currentMinute < TradingStartMinute);
+      bool isAfterEnd = (currentHour > TradingEndHour) || (currentHour == TradingEndHour && currentMinute > TradingEndMinute);
+
+      if (TradingStartHour <= TradingEndHour) // Normal time range within the same day
+      {
+        if (isBeforeStart || isAfterEnd)
+        {
+          if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
+          return (0);
+        }
+      }
+      else // Time range spans midnight
+      {
+        if (!isBeforeStart && !isAfterEnd)
+        {
+          if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
+          return (0);
+        }
+      }
+    }
+
+  // variables to reset
+   OrderNumber=0; // OrderNumber used in Entry Rules
    double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); //points
    bool IsAfterExit = false;
 
@@ -595,7 +647,7 @@ int start()
       prev_ner_lo_zone_P2 = ner_lo_zone_P2;
    }
 
-//----------TP, SL, Breakeven and Trailing Stops Variables-----------
+//----------Stop loss and Take Profit calculation for new trades -----------
    
     if(UseFixedStopLoss==True) 
     {
@@ -684,29 +736,6 @@ int start()
       }
     }
 
-   if(UseBreakevenStops) BreakevenStopAll(OnJournaling,RetryInterval,BreakevenBuffer,MagicNumber,PipFactor);
-   if(UseTrailingStops) TrailingStopAll(OnJournaling,TrailingStopDistance,TrailingStopBuffer,RetryInterval,MagicNumber,PipFactor);
-   if(UseVolTrailingStops) {
-      UpdateVolTrailingList(OnJournaling,RetryInterval,MagicNumber);
-      ReviewVolTrailingStop(OnJournaling,VolTrailingDistMultiplier,VolTrailingBuffMultiplier,RetryInterval,MagicNumber,PipFactor);
-   }
-//----------(Hidden) TP, SL, Breakeven and Trailing Stops Variables-----------  
-
-   if(UseHiddenStopLoss) TriggerStopLossHidden(OnJournaling,RetryInterval,MagicNumber,Slippage,PipFactor);
-   if(UseHiddenTakeProfit) TriggerTakeProfitHidden(OnJournaling,RetryInterval,MagicNumber,Slippage,PipFactor);
-   if(UseHiddenBreakevenStops) { 
-      UpdateHiddenBEList(OnJournaling,RetryInterval,MagicNumber);
-      SetAndTriggerBEHidden(OnJournaling,BreakevenBuffer,MagicNumber,Slippage,PipFactor,RetryInterval);
-   }
-   if(UseHiddenTrailingStops) {
-      UpdateHiddenTrailingList(OnJournaling,RetryInterval,MagicNumber);
-      SetAndTriggerHiddenTrailing(OnJournaling,TrailingStopDistance_Hidden,TrailingStopBuffer_Hidden,Slippage,RetryInterval,MagicNumber,PipFactor);
-   }
-   if(UseHiddenVolTrailing) {
-      UpdateHiddenVolTrailingList(OnJournaling,RetryInterval,MagicNumber);
-      TriggerAndReviewHiddenVolTrailing(OnJournaling,VolTrailingDistMultiplier_Hidden,VolTrailingBuffMultiplier_Hidden,Slippage,RetryInterval,MagicNumber,PipFactor);
-   }
-
 //----------Exit Rules (All Opened Positions)-----------
    // TDL 2: Setting up Exit rules. Modify the ExitSignal() function to suit your needs.
 
@@ -722,33 +751,6 @@ int start()
      }
 
 //----------Entry Rules (Market and Pending) -----------
-    if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
-    {
-      datetime localTime = TimeLocal();
-      int currentHour = TimeHour(localTime);
-      int currentMinute = TimeMinute(localTime);
-
-      bool isBeforeStart = (currentHour < TradingStartHour) || (currentHour == TradingStartHour && currentMinute < TradingStartMinute);
-      bool isAfterEnd = (currentHour > TradingEndHour) || (currentHour == TradingEndHour && currentMinute > TradingEndMinute);
-
-      if (TradingStartHour <= TradingEndHour) // Normal time range within the same day
-      {
-        if (isBeforeStart || isAfterEnd)
-        {
-          if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
-          return (0);
-        }
-      }
-      else // Time range spans midnight
-      {
-        if (!isBeforeStart && !isAfterEnd)
-        {
-          if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
-          return (0);
-        }
-      }
-    }
-
    if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger))==True) 
    {
       if(OnJournaling) Print("Loss limit breached, no new trades will be opened until reset.");
@@ -809,6 +811,8 @@ int start()
       Print("Stop Loss is zero, cannot calculate position size");
       return (0); // Exit if Stop Loss is zero
     }
+
+// ---------- positions processing ----------
 
    if(TradeAllowed && EntrySignal(Trigger)==1)
     { // Open Long Positions
