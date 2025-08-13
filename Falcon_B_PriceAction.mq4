@@ -54,7 +54,10 @@ extern double  LossLimitPercent                 = 50;
 
 extern string  Header20="----------Breakout settings -----------";
 extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
-extern int     BreakoutMarginPoints             = 1; // Breakout Margin (Points)
+extern bool    UseBreakoutPoints                = False;
+extern int     BreakoutMarginPoints             = 10; // Breakout Margin (Points)
+extern bool    UseBreakoutATR                   = True;
+extern double  BreakoutMarginATRMultiplier      = 1; // Breakout Distance (ATR Multiplier)
 
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
@@ -102,9 +105,9 @@ extern double  TrailingStopDistance_Hidden      = 0; // In pips
 extern double  TrailingStopBuffer_Hidden        = 0; // In pips
 
 extern string  Header10="----------Volatility Trailing Stops Settings-----------";
-extern bool    UseVolTrailingStops              = False;
-extern double  VolTrailingDistMultiplier        = 0; // Trailing distance In units of ATR
-extern double  VolTrailingBuffMultiplier        = 0; // Trailing buffer In units of ATR
+extern bool    UseVolTrailingStops              = True;
+extern double  VolTrailingDistMultiplier        = 1; // Trailing distance In units of ATR
+extern double  VolTrailingBuffMultiplier        = 0.3; // Trailing buffer In units of ATR
 
 extern string  Header11="----------Hidden Volatility Trailing Stops Settings-----------";
 extern bool    UseHiddenVolTrailing             = False;
@@ -143,7 +146,11 @@ extern string  Header18="----------Trend rules settings-----------";
 extern bool    UseReversal                      = True;     // Use Reversal 
 
 extern string  Header19="----------Mean reversal settings-----------";
-extern int     MeanReversalDistancePoints         = 5;       // Mean Reversal Distance (Points)
+extern bool    UseMeanReversalPoints            = False;     // Use Mean Reversal (Points)
+extern int     MeanReversalDistancePoints       = 5;       // Mean Reversal Distance (Points)
+extern bool    UseMeanReversalATR               = True;     // Use Mean Reversal (ATR)
+extern double  MeanReversalATRMultiplier        = 1;      // Mean Reversal ATR Multiplier
+extern double  MeanReversalLoHiDistance         = 5;    // Mean Reversal Low-High Distance Multiplier (in ATR units)
 
 extern string  Header21="----------Trading time settings-----------";
 extern int     TradingStartHour                 = 0;        // Start hour for trading (0-23)
@@ -437,6 +444,9 @@ int start()
 
    myATR=iATR(NULL,Period(),atr_period,1);
 
+   if(UseBreakoutATR)
+      BreakoutMarginPoints = BreakoutMarginATRMultiplier * myATR / Point;
+
   //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", " ATR: ", myATR);
    
    //----------Entry & Exit rules -----------
@@ -607,6 +617,9 @@ int start()
         // Print("Close[1]: ", Close[1], " ,hi P1 + margin: ", ner_hi_zone_P1 + BreakoutMarginPoints*Point, " ,hi P2 + margin: ", ner_hi_zone_P2 + BreakoutMarginPoints*Point);
         // Print("Close[1]: ", Close[1], " ,lo P1 - margin: ", ner_lo_zone_P1 - BreakoutMarginPoints*Point, " ,lo P2 - margin: ", ner_lo_zone_P2 - BreakoutMarginPoints*Point);
 
+        if(UseMeanReversalATR)
+          MeanReversalDistancePoints = MeanReversalATRMultiplier * myATR / Point;
+
         if(peaksState.trendState == UP_TREND)
         {
           if(((Close[1] > prev_ner_hi_zone_P1 + BreakoutMarginPoints*Point) && (peaksState.peakClose1 < prev_ner_hi_zone_P1)) ||
@@ -616,7 +629,9 @@ int start()
             Trigger = 1;
             if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
           }
-          else if(Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point || Close[2] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point) // Check for mean reversal condition
+          else if((UseMeanReversalATR || UseMeanReversalPoints) && 
+                  (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
+                  (Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point || Close[2] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point)) // Check for mean reversal condition
           {
             IsMeanReversal = true; // Set flag for mean reversal condition
             if(OnJournaling) Print("Mean Reversal Condition - BUY above supply line");
@@ -632,7 +647,9 @@ int start()
             Trigger = 2;
             if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
           } 
-          else if(Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point || Close[2] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point) // Check for mean reversal condition
+          else if((UseMeanReversalATR || UseMeanReversalPoints) && 
+                  (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
+                  (Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point || Close[2] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point)) // Check for mean reversal condition
           {
             IsMeanReversal = true; // Set flag for mean reversal condition
             if(OnJournaling) Print("Mean Reversal Condition - SELL below demand line");
