@@ -49,16 +49,18 @@ extern double  MaxSpread                        = 50; // Maximum spread (Pips)
 extern bool    UseMaxSpreadATR                  = True;
 extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
 
-extern string  Header13="----------Set Max Loss Limit settings-----------";
-extern bool    IsLossLimitActivated             = False;
-extern double  LossLimitPercent                 = 50;
+extern string  Header13="----------Set Max Loss Win Limit settings-----------";
+extern bool    IsLossLimitActivated             = False; // Enable Max Loss Win Limit
+extern double  LossLimitPercent                 = 50; // Loss Limit (%)
+extern double  WinLimitPercent                  = 3; // Win Limit (%)
+
 
 extern string  Header20="----------Breakout settings -----------";
 extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
 extern bool    UseBreakoutPoints                = False;
 extern int     BreakoutMarginPoints             = 10; // Breakout Margin (Points)
 extern bool    UseBreakoutATR                   = True;
-extern double  BreakoutMarginATRMultiplier      = 0.5; // Breakout Distance (ATR Multiplier)
+extern double  BreakoutMarginATRMultiplier      = 0.2; // Breakout Distance (ATR Multiplier)
 
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
@@ -344,23 +346,32 @@ int start()
     // If there are no open positions and we found a losing trade in history
     if(!lastOrderClosedByStopLoss)
     {
+      double price;
       double profit;
       int type;
-      if(GetBarProfitByTime(TimeCurrent(), MagicNumber, profit, type) && profit < 0) // Check if there was a losing trade
+      if(GetBarProfitByTime(TimeCurrent(), MagicNumber, profit, type, price)) // Check if there was a losing trade
       {
-        if(type==OP_BUY)
+        if(profit < 0)
         {
-          // Last trade was a losing buy, trigger a sell
-          Trigger = 2;
-          if(OnJournaling) Print("Entry Signal - SELL after losing BUY trade");
+          if(type==OP_BUY)
+          {
+            // Last trade was a losing buy, trigger a sell
+            Trigger = 2;
+            if(OnJournaling) Print("Entry Signal - SELL after losing BUY trade");
+          }
+          else if(type==OP_SELL) 
+          {
+            // Last trade was a losing sell, trigger a buy
+            Trigger = 1;
+            if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
+          }
+          lastOrderClosedByStopLoss = true; // Store the last order profit}
+          VisualizeResultOverlay(0, 2, price);
         }
-        else if(type==OP_SELL) 
+        else if(profit > 0)
         {
-          // Last trade was a losing sell, trigger a buy
-          Trigger = 1;
-          if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
+          VisualizeResultOverlay(0, 1, price);
         }
-        lastOrderClosedByStopLoss = true; // Store the last order profit
       }
     }
 
@@ -746,17 +757,17 @@ int start()
     {
       if(Take==1)
       {
-        if(Take > MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point) //P2 is the lower bound of the supply zone
+        if(Take > (MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point)/(PipFactor*Point)) //P2 is the lower bound of the supply zone
         {
           Print("Take Profit is close to supply zone, adjusting Take Profit");
-          Take = MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point; // Adjust Take Profit to be below the supply zone
+          Take = (MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
         }
         
       }
-      else if(Take==2 && Take > MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point) // P1 is the upper bound of the demand zone
+      else if(Take==2 && Take > (MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point)/(PipFactor*Point)) // P1 is the upper bound of the demand zone
       {
         Print("Take Profit is close to demand zone, adjusting Take Profit");
-        Take = MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point; // Adjust Take Profit to be below the demand zone
+        Take = (MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point)/(PipFactor*Point); // Adjust Take Profit to be below the demand zone
       }
     }
 
@@ -2736,6 +2747,38 @@ void VisualizeSignalOverlay(int i, int signal)
       ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_CENTER);
       ObjectSet(name, OBJPROP_STYLE, STYLE_SOLID);
       ObjectSet(name, OBJPROP_ARROWCODE, arrowCode); // e.g., 233 for up, 234 for down
+      ObjectSet(name, OBJPROP_COLOR, col);
+   }
+   else
+   {
+      if(PAverbose) Print("Failed to create text object: ", name);
+   }
+   
+}
+
+void VisualizeResultOverlay(int i, int winloss, double price)
+{
+   static int signalsCountr = 0;
+  //  string txt = "";
+   string code = "";
+   color col = clrBlack;
+
+
+   switch(winloss) {
+      case 1:   code = "ü";  col = clrGreen;  break;   
+      case 2:   code = "û";  col = clrRed;   break; 
+      default:  return; 
+   }
+   string name = "result_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + code;
+  //  Print("VisualizeSignalOverlay: i=", i, " name=", name, ", y=", y);
+
+   ObjectDelete(name);
+   if(ObjectCreate(name, OBJ_TEXT, 0, Time[0], price))
+   {
+      ObjectSetText(name, code, 24, "Wingdings", col);
+      ObjectSet(name, OBJPROP_CORNER, 0);
+      ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_CENTER);
+      ObjectSet(name, OBJPROP_STYLE, STYLE_SOLID);
       ObjectSet(name, OBJPROP_COLOR, col);
    }
    else
