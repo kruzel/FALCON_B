@@ -50,8 +50,9 @@ extern bool    UseMaxSpreadATR                  = True;
 extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
 
 extern string  Header13="----------Set Max Loss Win Limit settings-----------";
-extern bool    IsLossLimitActivated             = False; // Enable Max Loss Win Limit
-extern double  LossLimitPercent                 = 50; // Loss Limit (%)
+extern bool    IsLossLimitActivated             = True; // Enable Max Loss Limit
+extern double  LossLimitPercent                 = -3; // Loss Limit (%)
+extern bool    IsWinLimitActivated              = True; // Enable Max Win Limit
 extern double  WinLimitPercent                  = 3; // Win Limit (%)
 
 
@@ -276,7 +277,16 @@ int init()
     SupportResistance = new CSupportResistance(SRmarginPoints, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
 
     TradeController = new CTradingControl();
-    TradeController.CreateButton();
+    TradeController.CreateController();
+
+   PaResults paState = PriceActionStates.ProcessBars(1);
+   if(UseSupportResistance)
+    SupportResistance.SRUpdate(0); // Update for current bar
+  
+    if((UseSupplyDemandPoints || UseSupplyDemandATR) && !lastOrderClosedByStopLoss)
+   {
+      iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
+   }
 
    start();
    return(0);
@@ -301,6 +311,7 @@ int deinit()
 
     if(TradeController != NULL)
       {
+        TradeController.DeleteController();
         delete TradeController;
         TradeController = NULL;
       }
@@ -318,6 +329,17 @@ int deinit()
     }
 
     str = "peak_";
+    // Loop backwards to avoid skipping objects when deleting
+    for(int i = total - 1; i >= 0; i--)
+    {
+        string name = ObjectName(i);
+        if(StringFind(name, str) != -1)
+        {
+            ObjectDelete(name);
+        }
+    }
+
+    str = "result_";
     // Loop backwards to avoid skipping objects when deleting
     for(int i = total - 1; i >= 0; i--)
     {
@@ -349,7 +371,8 @@ int start()
       double price;
       double profit;
       int type;
-      if(GetBarProfitByTime(TimeCurrent(), MagicNumber, profit, type, price)) // Check if there was a losing trade
+      datetime now = TimeCurrent();
+      if(GetBarProfitByTime(now, MagicNumber, profit, type, price)) // Check if there was a losing trade
       {
         if(profit < 0)
         {
@@ -366,11 +389,11 @@ int start()
             if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
           }
           lastOrderClosedByStopLoss = true; // Store the last order profit}
-          VisualizeResultOverlay(0, 2, price);
+          VisualizeResultOverlay(now, 2, price);
         }
         else if(profit > 0)
         {
-          VisualizeResultOverlay(0, 1, price);
+          VisualizeResultOverlay(now, 1, price);
         }
       }
     }
@@ -430,6 +453,9 @@ int start()
         Print("Trading is disabled, click the button to enable trading.");
         return (0);
       } 
+
+    LossLimitPercent = TradeController.GetLossTarget();
+    WinLimitPercent = TradeController.GetWinTarget();
 
     if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
     {
@@ -786,9 +812,15 @@ int start()
      }
 
 //----------Entry Rules (Market and Pending) -----------
-   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger))==True) 
+   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber) == True) 
    {
       if(OnJournaling) Print("Loss limit breached, no new trades will be opened until reset.");
+      return (0);
+   }
+
+   if(IsWinLimitBreached(IsWinLimitActivated,WinLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber)==True) 
+   {
+      if(OnJournaling) Print("Win limit breached, no new trades will be opened until reset.");
       return (0);
    }
 
@@ -1558,7 +1590,7 @@ double VolBasedTakeProfit(bool isVolatilitySwitchOn,double fixedTP,double VolATR
 //+------------------------------------------------------------------+
 //| Is Loss Limit Breached                                       
 //+------------------------------------------------------------------+
-bool IsLossLimitBreached(bool LossLimitActivated,double LossLimitPercentage,bool Journaling,int EntrySignalTrigger)
+bool IsLossLimitBreached(bool LossLimitActivated,double LossLimitPercentage,bool Journaling,int EntrySignalTrigger, int Magic)
   {
 
 // Type: Fixed Template 
@@ -1580,13 +1612,54 @@ bool IsLossLimitBreached(bool LossLimitActivated,double LossLimitPercentage,bool
       firstTick=True;
      }
 
-   profitAndLoss=(AccountEquity()/initialCapital)-1;
+  
 
-   if(profitAndLoss<-LossLimitPercentage/100)
+   profitAndLoss=(GetProfitToday(Magic)/initialCapital);
+
+   if(profitAndLoss<LossLimitPercentage/100)
      {
       output=True;
       profitAndLossPrint=NormalizeDouble(profitAndLoss,4)*100;
       if(Journaling)if(EntrySignalTrigger!=0) Print("Entry trade triggered but not executed. Loss threshold breached. Current Loss: "+(string)profitAndLossPrint+"%");
+     }
+
+   return(output);
+  }
+//+------------------------------------------------------------------+
+//| End of Is Loss Limit Breached                                     
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Is Win Limit Breached                                       
+//+------------------------------------------------------------------+
+bool IsWinLimitBreached(bool WinLimitActivated,double WinLimitPercentage,bool Journaling,int EntrySignalTrigger,int Magic)
+  {
+
+// Type: Fixed Template 
+// Do not edit unless you know what you're doing
+
+// This function determines if our maximum loss threshold is breached
+
+   static bool firstTick=False;
+   static double initialCapital2=0;
+   double profitAndLoss=0;
+   double profitAndLossPrint=0;
+   bool output=False;
+
+   if(WinLimitActivated==False) return(output);
+
+   if(firstTick==False)
+     {
+      initialCapital2=AccountEquity();
+      firstTick=True;
+     }
+
+   profitAndLoss=(GetProfitToday(Magic)/initialCapital2);
+
+   if(profitAndLoss>WinLimitPercentage/100)
+     {
+      output=True;
+      profitAndLossPrint=NormalizeDouble(profitAndLoss,4)*100;
+      if(Journaling)if(EntrySignalTrigger!=0) Print("Entry trade triggered but not executed. Win threshold breached. Current Win: "+(string)profitAndLossPrint+"%");
      }
 
    return(output);
@@ -2756,7 +2829,7 @@ void VisualizeSignalOverlay(int i, int signal)
    
 }
 
-void VisualizeResultOverlay(int i, int winloss, double price)
+void VisualizeResultOverlay(datetime now, int winloss, double price)
 {
    static int signalsCountr = 0;
   //  string txt = "";
@@ -2769,11 +2842,11 @@ void VisualizeResultOverlay(int i, int winloss, double price)
       case 2:   code = "û";  col = clrRed;   break; 
       default:  return; 
    }
-   string name = "result_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(Time[i], TIME_MINUTES) + "_" + code;
+   string name = "result_" + IntegerToString(signalsCountr++) + "_time_" + TimeToString(now, TIME_MINUTES) + "_" + code;
   //  Print("VisualizeSignalOverlay: i=", i, " name=", name, ", y=", y);
 
    ObjectDelete(name);
-   if(ObjectCreate(name, OBJ_TEXT, 0, Time[0], price))
+   if(ObjectCreate(name, OBJ_TEXT, 0, now, price))
    {
       ObjectSetText(name, code, 24, "Wingdings", col);
       ObjectSet(name, OBJPROP_CORNER, 0);
