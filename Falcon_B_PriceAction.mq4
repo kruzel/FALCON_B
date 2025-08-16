@@ -48,8 +48,8 @@ extern int     MaxPositionsAllowed              = 1;
 extern double  MaxSpread                        = 50; // Maximum spread (Pips)
 extern bool    UseMaxSpreadATR                  = True;
 extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
-extern bool    IsAreaManagementEnabled          = True; // Enable Areas Money Management
-extern double  AreaMMSizeIncrement               = 1; // Loss size increament %
+extern bool    IsArearsManagementEnabled          = True; // Enable Arears Money Management
+extern double  ArearsMMSizeIncrement               = 1; // Arears Money Management increment %
 
 extern string  Header13="----------Set Max Loss Win Limit settings-----------";
 extern bool    IsLossLimitActivated             = True; // Enable Max Loss Limit
@@ -285,12 +285,25 @@ int init()
    if(UseSupportResistance)
     SupportResistance.SRUpdate(0); // Update for current bar
   
-    if((UseSupplyDemandPoints || UseSupplyDemandATR) && !lastOrderClosedByStopLoss)
+    if(UseSupplyDemandPoints || UseSupplyDemandATR)
    {
       iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
    }
 
-   UpdatesRisk = Risk;
+   if(IsArearsManagementEnabled)
+   {
+    int losses = GetConsecutiveFailureCount(MagicNumber);
+    if(losses > 0)
+    {
+        UpdatesRisk = Risk + ArearsMMSizeIncrement * losses;
+        if(OnJournaling) Print("Losses count: ", losses, " Updated Risk: ", UpdatesRisk);
+    }
+  }
+  else
+  {
+    UpdatesRisk = Risk; // reset to default risk size
+    if(OnJournaling) Print("Updated Risk: ", UpdatesRisk);
+  }
 
    start();
    return(0);
@@ -366,7 +379,7 @@ int deinit()
 int start()
   {
     Trigger = 0; // Reset trigger for entry/exit signals
-    lastOrderClosedByStopLoss = false;
+    // lastOrderClosedByStopLoss = false;
     IsMeanReversal = false;
 
     // If there are no open positions and we found a losing trade in history
@@ -394,10 +407,24 @@ int start()
           }
           lastOrderClosedByStopLoss = true; // Store the last order profit}
 
-          if(IsAreaManagementEnabled)
+          if(IsArearsManagementEnabled)
           {
-            UpdatesRisk += AreaMMSizeIncrement; // Increase risk for next trade if area management is enabled
-            if(OnJournaling) Print("Areas Money Management - Increased Risk: ", UpdatesRisk);
+            int losses = GetConsecutiveFailureCount(MagicNumber);
+            if(losses > 0)
+            {
+                UpdatesRisk = Risk + ArearsMMSizeIncrement * losses;
+                if(OnJournaling) Print("Losses count: ", losses, " Updated Risk: ", UpdatesRisk);
+            }
+            else
+            {
+                UpdatesRisk = Risk;
+                if(OnJournaling) Print("Arears Money Management - Updated Risk: ", UpdatesRisk);
+            }
+          }
+          else
+          {
+              UpdatesRisk = Risk;
+              if(OnJournaling) Print("Arears Money Management - Updated Risk: ", UpdatesRisk);
           }
 
           VisualizeResultOverlay(now, 2, price);
@@ -405,7 +432,7 @@ int start()
         else if(profit > 0)
         {
           UpdatesRisk = Risk; // reset to default risk size
-          if(OnJournaling) Print("Areas Money Management - Reset Risk: ", UpdatesRisk);
+          if(OnJournaling) Print("Arears Money Management - Reset Risk: ", UpdatesRisk);
           VisualizeResultOverlay(now, 1, price);
         }
       }
@@ -435,7 +462,8 @@ int start()
       TriggerAndReviewHiddenVolTrailing(OnJournaling,VolTrailingDistMultiplier_Hidden,VolTrailingBuffMultiplier_Hidden,Slippage,RetryInterval,MagicNumber,PipFactor);
    }
 
-    if(!isNewBar() && !lastOrderClosedByStopLoss)
+//--------- Check if its a new bar -------------------------
+    if(!isNewBar() && Trigger==0)
       return (0);
 //----------Order management through R - to avoid slow down the system only enable with external parameters
    if(R_Management)
@@ -827,18 +855,21 @@ int start()
 //----------Entry Rules (Market and Pending) -----------
    if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber) == True) 
    {
+      lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
       if(OnJournaling) Print("Loss limit breached, no new trades will be opened until reset.");
       return (0);
    }
 
    if(IsWinLimitBreached(IsWinLimitActivated,WinLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber)==True) 
    {
+      lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
       if(OnJournaling) Print("Win limit breached, no new trades will be opened until reset.");
       return (0);
    }
 
    if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==True)
    {
+      lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
       if(OnJournaling) Print("Volatility limit breached, no new trades will be opened until reset.");
       return (0); // Exit if volatility limit is breached
    }
@@ -846,12 +877,14 @@ int start()
    if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==True)
    {
       // if(OnJournaling) Print("Max positions reached, cannot open new trades.");
+      lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
       return (0);
    }
 
    if(!IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
     {
         BreakoutState = BO_WAITING;
+        lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
         if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
         return (0); // Exit without opening new trades
       }
@@ -952,7 +985,7 @@ int start()
 
 //----
 
-    // reset states variables
+    // reset states variables 
     lastOrderClosedByStopLoss = false;
 
    return(0);
