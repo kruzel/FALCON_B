@@ -48,13 +48,14 @@ extern int     MaxPositionsAllowed              = 1;
 extern double  MaxSpread                        = 50; // Maximum spread (Pips)
 extern bool    UseMaxSpreadATR                  = True;
 extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
+extern bool    IsAreaManagementEnabled          = True; // Enable Areas Money Management
+extern double  AreaMMSizeIncrement               = 1; // Loss size increament %
 
 extern string  Header13="----------Set Max Loss Win Limit settings-----------";
 extern bool    IsLossLimitActivated             = True; // Enable Max Loss Limit
 extern double  LossLimitPercent                 = -3; // Loss Limit (%)
 extern bool    IsWinLimitActivated              = True; // Enable Max Win Limit
 extern double  WinLimitPercent                  = 3; // Win Limit (%)
-
 
 extern string  Header20="----------Breakout settings -----------";
 extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
@@ -175,6 +176,7 @@ double StopHidden,TakeHidden;
 
 int    PipFactor;
 double myATR;
+double UpdatesRisk = Risk;
 
 // TDL 3: Declaring Variables (and the extern variables above)
 
@@ -288,6 +290,8 @@ int init()
       iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
    }
 
+   UpdatesRisk = Risk;
+
    start();
    return(0);
   }
@@ -389,10 +393,19 @@ int start()
             if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
           }
           lastOrderClosedByStopLoss = true; // Store the last order profit}
+
+          if(IsAreaManagementEnabled)
+          {
+            UpdatesRisk += AreaMMSizeIncrement; // Increase risk for next trade if area management is enabled
+            if(OnJournaling) Print("Areas Money Management - Increased Risk: ", UpdatesRisk);
+          }
+
           VisualizeResultOverlay(now, 2, price);
         }
         else if(profit > 0)
         {
+          UpdatesRisk = Risk; // reset to default risk size
+          if(OnJournaling) Print("Areas Money Management - Reset Risk: ", UpdatesRisk);
           VisualizeResultOverlay(now, 1, price);
         }
       }
@@ -667,7 +680,7 @@ int start()
         if(peaksState.trendState == UP_TREND)
         {
           if(((Close[1] > prev_ner_hi_zone_P1 + BreakoutMarginPoints*Point) && (peaksState.peakClose1 < prev_ner_hi_zone_P1)) ||
-            ((peaksState.trendState == UP_TREND) && (Close[1] > prev_ner_hi_zone_P2 + BreakoutMarginPoints*Point) &&  (peaksState.peakClose1 < prev_ner_hi_zone_P2)))
+            ((Close[1] > prev_ner_hi_zone_P2 + BreakoutMarginPoints*Point) &&  (peaksState.peakClose1 < prev_ner_hi_zone_P2)))
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 1;
@@ -685,7 +698,7 @@ int start()
         else if (peaksState.trendState == DOWN_TREND)
         {
           if (((Close[1] < prev_ner_lo_zone_P2 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P2)) ||
-            ((peaksState.trendState == DOWN_TREND) && (Close[1] < prev_ner_lo_zone_P1 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P1)))
+            ((Close[1] < prev_ner_lo_zone_P1 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P1)))
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 2;
@@ -883,7 +896,7 @@ int start()
 
    if(TradeAllowed && EntrySignal(Trigger)==1)
     { // Open Long Positions
-      OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,Risk,Stop, PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+      OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,UpdatesRisk,Stop, PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Set Stop Loss value for Hidden SL
       if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
@@ -908,7 +921,7 @@ int start()
 
    if(TradeAllowed && EntrySignal(Trigger)==2)
     { // Open Short Positions
-      OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,Risk,Stop,PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+      OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,UpdatesRisk,Stop,PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Set Stop Loss value for Hidden SL
       if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
