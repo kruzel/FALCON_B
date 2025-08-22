@@ -226,7 +226,7 @@ def find_closest_chart(target_time, chart_images):
 
 # Usage example
 if __name__ == "__main__":
-    symbol = "DE40"
+    symbol = "BTCUSD"
     date = "2025.08.22"
 
     root_folder = Path(r"C:\Users\Ofer Kruzel\AppData\Roaming\MetaQuotes\Terminal\0A89B723E9501DAD3F2D5CB4F27EBDAB\MQL4")
@@ -234,7 +234,7 @@ if __name__ == "__main__":
     images_folder = root_folder / "Files" / "ScreenShots" / symbol
 
     dt = datetime.strptime(date, "%Y.%m.%d")
-    output_file = r"Analysis\trading_report_" + date + ".html"
+    output_file = r"Analysis\trading_report_" + symbol + "_" + date + ".html"
     
     generate_trading_report(logs_folder, images_folder, output_file, dt, symbol)
     print(f"HTML report generated: {output_file}")

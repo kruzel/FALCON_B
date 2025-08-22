@@ -389,7 +389,7 @@ int start()
       double profit;
       int type;
       datetime now = TimeCurrent();
-      if(GetBarProfitByTime(now, MagicNumber, profit, type, price)) // Check if there was a losing trade
+      if(GetBarProfitByTime(now, MagicNumber, profit, type, price,Symbol())) // Check if there was a losing trade
       {
         SaveChart();
         
