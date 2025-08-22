@@ -717,7 +717,8 @@ int start()
         if(peaksState.trendState == UP_TREND)
         {
           if(((Close[1] > prev_ner_hi_zone_P1 + BreakoutMarginPoints*Point) && (peaksState.peakClose1 < prev_ner_hi_zone_P1)) ||
-            ((Close[1] > prev_ner_hi_zone_P2 + BreakoutMarginPoints*Point) &&  (peaksState.peakClose1 < prev_ner_hi_zone_P2)))
+            ((Close[1] > prev_ner_hi_zone_P2 + BreakoutMarginPoints*Point) &&  (peaksState.peakClose1 < prev_ner_hi_zone_P2)) ||
+            (prev_ner_hi_zone_P1 >= 99999 && prev_ner_hi_zone_P2 >= 99999))
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 1;
@@ -735,7 +736,8 @@ int start()
         else if (peaksState.trendState == DOWN_TREND)
         {
           if (((Close[1] < prev_ner_lo_zone_P2 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P2)) ||
-            ((Close[1] < prev_ner_lo_zone_P1 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P1)))
+            ((Close[1] < prev_ner_lo_zone_P1 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P1)) ||
+            (MathAbs(prev_ner_lo_zone_P1) >= 99999 && MathAbs(prev_ner_lo_zone_P2) >= 99999))
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 2;
