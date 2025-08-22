@@ -49,13 +49,13 @@ extern double  MaxSpread                        = 50; // Maximum spread (Pips)
 extern bool    UseMaxSpreadATR                  = True;
 extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
 extern bool    IsArearsManagementEnabled          = True; // Enable Arears Money Management
-extern double  ArearsMMSizeIncrement               = 1; // Arears Money Management increment %
+extern double  ArearsMMSizeIncrement            = 0.5; // Arears Money Management increment %
 
 extern string  Header13="----------Set Max Loss Win Limit settings-----------";
 extern bool    IsLossLimitActivated             = True; // Enable Max Loss Limit
-extern double  LossLimitPercent                 = -3; // Loss Limit (%)
+extern double  LossLimitPercent                 = -3.0; // Loss Limit (%)
 extern bool    IsWinLimitActivated              = True; // Enable Max Win Limit
-extern double  WinLimitPercent                  = 3; // Win Limit (%)
+extern double  WinLimitPercent                  = 3.0; // Win Limit (%)
 
 extern string  Header20="----------Breakout settings -----------";
 extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
@@ -110,7 +110,7 @@ extern double  TrailingStopDistance_Hidden      = 0; // In pips
 extern double  TrailingStopBuffer_Hidden        = 0; // In pips
 
 extern string  Header10="----------Volatility Trailing Stops Settings-----------";
-extern bool    UseVolTrailingStops              = True;
+extern bool    UseVolTrailingStops              = False;
 extern double  VolTrailingDistMultiplier        = 1; // Trailing distance In units of ATR
 extern double  VolTrailingBuffMultiplier        = 0.3; // Trailing buffer In units of ATR
 
@@ -279,7 +279,7 @@ int init()
     SupportResistance = new CSupportResistance(SRmarginPoints, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
 
     TradeController = new CTradingControl();
-    TradeController.CreateController();
+    TradeController.CreateController(LossLimitPercent, WinLimitPercent);
 
    PaResults paState = PriceActionStates.ProcessBars(1);
    if(UseSupportResistance)
@@ -417,8 +417,11 @@ int start()
             }
             else
             {
-                UpdatesRisk = Risk;
-                if(OnJournaling) Print("Arears Money Management - Updated Risk: ", UpdatesRisk);
+                if(UpdatesRisk>Risk)
+                {
+                  UpdatesRisk = UpdatesRisk - ArearsMMSizeIncrement; // reset to default risk size
+                  if(OnJournaling) Print("Arears Money Management - Updated Risk: ", UpdatesRisk);
+                }
             }
           }
           else
@@ -431,8 +434,12 @@ int start()
         }
         else if(profit > 0)
         {
-          UpdatesRisk = Risk; // reset to default risk size
-          if(OnJournaling) Print("Arears Money Management - Reset Risk: ", UpdatesRisk);
+          if(UpdatesRisk>Risk)
+          {
+            UpdatesRisk = UpdatesRisk - ArearsMMSizeIncrement; // reset to default risk size
+            if(OnJournaling) Print("Arears Money Management - Updated Risk: ", UpdatesRisk);
+          }
+
           VisualizeResultOverlay(now, 1, price);
         }
       }
@@ -820,21 +827,32 @@ int start()
     }
 
     // check if Take is close to supply or demand zone
-    if((UseSupplyDemandPoints || UseSupplyDemandATR) && Take > 0)
+    if((UseSupplyDemandPoints || UseSupplyDemandATR) && Trigger > 0)
     {
-      if(Take==1)
+      if(Trigger==1)
       {
+        // Print("Take Profit is close to supply zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_hi_zone_P2: ", ner_hi_zone_P2, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
         if(Take > (MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point)/(PipFactor*Point)) //P2 is the lower bound of the supply zone
         {
-          Print("Take Profit is close to supply zone, adjusting Take Profit");
           Take = (MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
+          if(Take < supplyDemandMarginPoints / PipFactor) // Ensure Take is not too small
+          {
+            Print("Take Profit is too close to supply zone, canceling signal");
+            Trigger = 0; //Cancel signal
+          }
         }
         
       }
-      else if(Take==2 && Take > (MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point)/(PipFactor*Point)) // P1 is the upper bound of the demand zone
+      else if(Trigger==2 && Take > (MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point)/(PipFactor*Point)) // P1 is the upper bound of the demand zone
       {
-        Print("Take Profit is close to demand zone, adjusting Take Profit");
+
+        // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_lo_zone_P1: ", ner_lo_zone_P1, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
         Take = (MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point)/(PipFactor*Point); // Adjust Take Profit to be below the demand zone
+        if(Take < supplyDemandMarginPoints / PipFactor) // Ensure Take is not too small
+        {
+          Print("Take Profit is too close to demand zone, canceling signal");
+          Trigger = 0; //Cancel signal
+        }
       }
     }
 
@@ -919,11 +937,11 @@ int start()
       return (0); // Exit if spread is too high
      }
 
-    if(Trigger != 0 && Stop==0)
-    {
-      Print("Stop Loss is zero, cannot calculate position size");
-      return (0); // Exit if Stop Loss is zero
-    }
+    // if(Trigger != 0 && Stop==0)
+    // {
+    //   Print("Stop Loss is zero, cannot calculate position size");
+    //   return (0); // Exit if Stop Loss is zero
+    // }
 
 // ---------- positions processing ----------
 
@@ -948,8 +966,9 @@ int start()
       if(lastOrderClosedByStopLoss)
         VisualizeSignalOverlay(0, Trigger);
       else
+      {
         VisualizeSignalOverlay(1, Trigger);
-      // SaveChart();
+      }
     }
 
    if(TradeAllowed && EntrySignal(Trigger)==2)
@@ -973,9 +992,12 @@ int start()
       if(lastOrderClosedByStopLoss)
         VisualizeSignalOverlay(0, Trigger);
       else
+      {
         VisualizeSignalOverlay(1, Trigger);
-      // SaveChart();
+      }
     }
+
+    SaveChart();
            
 
 //----------Pending Order Management-----------
@@ -2474,7 +2496,8 @@ void ReviewVolTrailingStop(bool Journaling, double VolTrailingDistMulti, double 
                RefreshRates();
 
                // We update the volatility trailing stop record using OrderModify.
-               if(OrderType()==OP_BUY && (Bid-OrderStopLoss()>(VolTrailingDistMulti*VolTrailingList[x,1]+VolTrailingBuffMulti*VolTrailingList[x,1])*K*Point))
+               if(OrderType()==OP_BUY && (Bid-OrderStopLoss()>(VolTrailingDistMulti*VolTrailingList[x,1]+VolTrailingBuffMulti*VolTrailingList[x,1])*K*Point) &&
+                  (OrderStopLoss()+VolTrailingBuffMulti*VolTrailingList[x,1]*K*Point < Bid))
                  {
                   if(Journaling)Print("Trying to modify order "+(string)OrderTicket()+" ...");
                   HandleTradingEnvironment(Journaling,Retry_Interval);
@@ -2482,7 +2505,8 @@ void ReviewVolTrailingStop(bool Journaling, double VolTrailingDistMulti, double 
                   if(Journaling && !Modify)Print("Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
                   if(Journaling && Modify)Print("Order successfully modified, volatility trailing stop changed.");
                  }
-               if(OrderType()==OP_SELL && ((OrderStopLoss()-Ask>((VolTrailingDistMulti*VolTrailingList[x,1]+VolTrailingBuffMulti*VolTrailingList[x,1])*K*Point)) || (OrderStopLoss()==0)))
+               if(OrderType()==OP_SELL && ((OrderStopLoss()-Ask>((VolTrailingDistMulti*VolTrailingList[x,1]+VolTrailingBuffMulti*VolTrailingList[x,1])*K*Point)) || (OrderStopLoss()==0))  &&
+                  (OrderStopLoss()-VolTrailingBuffMulti*VolTrailingList[x,1]*K*Point > Ask))
                  {
                   if(Journaling)Print("Trying to modify order "+(string)OrderTicket()+" ...");
                   HandleTradingEnvironment(Journaling,Retry_Interval);
@@ -2927,15 +2951,24 @@ void OnChartEvent(const int id,
 
 void SaveChart()
 {
-  string images_folder = "C:\\fin\\Metatrader_Debug";
-  string time_str = TimeToStr(TimeCurrent(), TIME_DATE|TIME_MINUTES);
-  time_str = StringReplace(time_str, ":", "-");
-  string filename = images_folder + "\\ScreenShot_" + Symbol() + "_" + time_str + ".png";
+  datetime current_time = TimeCurrent();
+  string time_str = StringFormat("%04d.%02d.%02d %02d-%02d-%02d",
+      TimeYear(current_time),
+      TimeMonth(current_time), 
+      TimeDay(current_time),
+      TimeHour(current_time),
+      TimeMinute(current_time),
+      TimeSeconds(current_time)
+  );
+  string filename = "ScreenShots\\" + Symbol() +"\\ScreenShot_" + Symbol() + "_" + time_str + ".png";
   Print("Saving chart screenshot to: ", filename);
 
   int width = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0);
   int height = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, 0);
   bool success = ChartScreenShot(0, filename, width, height);
   if(!success)
-    Print("Screenshot failed: ", GetLastError());
+  {
+    int error = GetLastError();
+    Print("Screenshot failed. Error: ", error, " - ", GetErrorDescription(error));
+  }
 }
