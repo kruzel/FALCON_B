@@ -3,17 +3,6 @@
 //|                                        Copyright 2015,Lucas Liew 
 //|                                  lucas@blackalgotechnologies.com 
 //+------------------------------------------------------------------+
-#include <Falcon_B_Include/01_GetHistoryOrder.mqh>
-#include <Falcon_B_Include/02_OrderProfitToCSV.mqh>
-#include <Falcon_B_Include/03_ReadCommandFromCSV.mqh>
-#include <Falcon_B_Include/08_TerminalNumber.mqh>
-#include <Falcon_B_Include/10_isNewBar.mqh>
-#include <Falcon_B_Include/enums.mqh>
-#include <Falcon_B_Include/PriceActionStates.mqh>
-#include <Falcon_B_Include/SupportResistance.mqh>
-#include <Falcon_B_Include/PinBarDetector.mqh>
-#include <Falcon_B_Include/TradingControl.mqh>
-
 
 #property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
 #property copyright "Copyright 2018, Vladimir Zhbanko"
@@ -164,6 +153,17 @@ extern int     TradingStartHour                 = 0;        // Start hour for tr
 extern int     TradingEndHour                   = 23;       // End hour for trading (0-23)
 extern int     TradingStartMinute               = 0;        // Start minute for trading (0-59)
 extern int     TradingEndMinute                 = 59;       // End minute for trading (0-59)
+
+#include <Falcon_B_Include/01_GetHistoryOrder.mqh>
+#include <Falcon_B_Include/02_OrderProfitToCSV.mqh>
+#include <Falcon_B_Include/03_ReadCommandFromCSV.mqh>
+#include <Falcon_B_Include/08_TerminalNumber.mqh>
+#include <Falcon_B_Include/10_isNewBar.mqh>
+#include <Falcon_B_Include/enums.mqh>
+#include <Falcon_B_Include/PriceActionStates.mqh>
+#include <Falcon_B_Include/SupportResistance.mqh>
+#include <Falcon_B_Include/PinBarDetector.mqh>
+#include <Falcon_B_Include/TradingControl.mqh>
 
 string  InternalHeader1="----------Errors Handling Settings-----------";
 int     RetryInterval                           = 100; // Pause Time before next retry (in milliseconds)
