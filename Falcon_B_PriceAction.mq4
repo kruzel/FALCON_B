@@ -772,7 +772,7 @@ int start()
           Stop=(Ask - MathMin(Low[1],High[1]))/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
-          Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
+          // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
           {
             if(Stop<MinStopLoss) 
             {
@@ -2961,7 +2961,7 @@ void SaveChart()
       TimeSeconds(current_time)
   );
   string filename = "ScreenShots\\" + Symbol() +"\\ScreenShot_" + Symbol() + "_" + time_str + ".png";
-  Print("Saving chart screenshot to: ", filename);
+  // Print("Saving chart screenshot to: ", filename);
 
   int width = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0);
   int height = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, 0);

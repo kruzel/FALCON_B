@@ -14,6 +14,7 @@
 **/*.ex4
 **/*.log
 **/*.dat
+**/*.html
 
 Setup.xlsx
 TEST/*-Re-Train.csv
