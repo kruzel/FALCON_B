@@ -828,8 +828,8 @@ int start()
       Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,PipFactor);
     }
 
-    // check if Take is close to supply or demand zone
-    if((UseSupplyDemandPoints || UseSupplyDemandATR) && Trigger > 0)
+    // check if Take is close to supply or demand zone, not in breakout
+    if((UseSupplyDemandPoints || UseSupplyDemandATR) && Trigger > 0 && BreakoutState!=BO_TRIGGERED)
     {
       if(Trigger==1)
       {
