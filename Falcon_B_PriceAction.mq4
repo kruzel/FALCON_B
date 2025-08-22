@@ -901,6 +901,14 @@ int start()
       return (0);
    }
 
+   if(UseSupplyDemandPoints || UseSupplyDemandATR)
+   {
+      if(Trigger == 1 && prev_ner_hi_zone_P1 >= 99999 && prev_ner_hi_zone_P2 >= 99999)
+        BreakoutState = BO_TRIGGERED;
+      if(Trigger == 2 && MathAbs(prev_ner_lo_zone_P1) >= 99999 && MathAbs(prev_ner_lo_zone_P2) >= 99999)
+        BreakoutState = BO_TRIGGERED;
+   }
+
    if(!IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
     {
         BreakoutState = BO_WAITING;
