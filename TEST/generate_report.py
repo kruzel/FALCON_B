@@ -21,7 +21,7 @@ def parse_log_line(line):
         return datetime.strptime(timestamp_str, '%H:%M:%S.%f')
     return None
 
-def generate_trading_report(logs_folder, images_folder, output_file, report_date):
+def generate_trading_report(logs_folder, images_folder, output_file, report_date, symbol):
     """Generate HTML report correlating logs with chart captures"""
     
     # Read all log files
@@ -33,12 +33,14 @@ def generate_trading_report(logs_folder, images_folder, output_file, report_date
         if target_date_str in log_file.name:
             with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
                 for line in f:
-                    timestamp = parse_log_line(line.strip())
-                    if timestamp:
-                        # Combine the time from log with the report date
-                        full_timestamp = datetime.combine(report_date.date(), timestamp.time())
-                        if full_timestamp.date() == report_date.date():
-                            log_entries.append((full_timestamp, line.strip()))
+                    # Check if the line contains the requested symbol
+                    if symbol in line:
+                        timestamp = parse_log_line(line.strip())
+                        if timestamp:
+                            # Combine the time from log with the report date
+                            full_timestamp = datetime.combine(report_date.date(), timestamp.time())
+                            if full_timestamp.date() == report_date.date():
+                                log_entries.append((full_timestamp, line.strip()))
     
     # Sort log entries by timestamp
     log_entries.sort(key=lambda x: x[0])
@@ -199,10 +201,12 @@ def write_html_time_group(f, timestamp, logs, chart_images, images_folder):
     
     f.write('        <div class="logs-section">\n')
     f.write('            <h4>Log Entries</h4>\n')
+    
     for log in logs:
         # Escape HTML special characters
         escaped_log = log.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        f.write(f'            <div class="log-entry">{escaped_log}</div>\n')
+        cleaned_log = escaped_log.replace("Falcon_B_PriceAction", "").strip()
+        f.write(f'            <div class="log-entry">{cleaned_log}</div>\n')
     f.write('        </div>\n')
     f.write('    </div>\n')
     f.write('</div>\n\n')
@@ -232,5 +236,5 @@ if __name__ == "__main__":
     dt = datetime.strptime(date, "%Y.%m.%d")
     output_file = r"TEST\trading_report_" + date + ".html"
     
-    generate_trading_report(logs_folder, images_folder, output_file, dt)
+    generate_trading_report(logs_folder, images_folder, output_file, dt, symbol)
     print(f"HTML report generated: {output_file}")
