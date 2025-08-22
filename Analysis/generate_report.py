@@ -234,7 +234,7 @@ if __name__ == "__main__":
     images_folder = root_folder / "Files" / "ScreenShots" / symbol
 
     dt = datetime.strptime(date, "%Y.%m.%d")
-    output_file = r"TEST\trading_report_" + date + ".html"
+    output_file = r"Analysis\trading_report_" + date + ".html"
     
     generate_trading_report(logs_folder, images_folder, output_file, dt, symbol)
     print(f"HTML report generated: {output_file}")

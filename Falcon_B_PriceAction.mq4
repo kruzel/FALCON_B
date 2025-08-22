@@ -391,6 +391,8 @@ int start()
       datetime now = TimeCurrent();
       if(GetBarProfitByTime(now, MagicNumber, profit, type, price)) // Check if there was a losing trade
       {
+        SaveChart();
+        
         if(profit < 0)
         {
           if(type==OP_BUY)
