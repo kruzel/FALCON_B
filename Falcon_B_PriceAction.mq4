@@ -165,6 +165,7 @@ extern int     TradingEndMinute                 = 59;       // End minute for tr
 #include <Falcon_B_Include/SupportResistance.mqh>
 #include <Falcon_B_Include/PinBarDetector.mqh>
 #include <Falcon_B_Include/TradingControl.mqh>
+#include <Falcon_B_Include/02_OrderProfitToCSV.mqh>
 
 string  InternalHeader1="----------Errors Handling Settings-----------";
 int     RetryInterval                           = 100; // Pause Time before next retry (in milliseconds)
@@ -172,14 +173,14 @@ int     MaxRetriesPerTick                       = 10;
 
 string  InternalHeader2="----------Service Variables-----------";
 
+int currentTerminal;
+
 double Stop,Take;
 double StopHidden,TakeHidden;
 
 int    PipFactor;
 double myATR;
 double UpdatesRisk = Risk;
-
-// TDL 3: Declaring Variables (and the extern variables above)
 
 double PipFiniteUptrendSignal1, PipFiniteDowntrendSignal1;
 int EntrySignal;
@@ -242,6 +243,7 @@ int init()
 // Write file to the sandbox if it's does not exist
 //    
    ReferenceTime = TimeCurrent(); // record time for order history function
+   currentTerminal = T_Num();
    
    //write file system control to enable initial trading
    TradeAllowed = ReadCommandFromCSV(MagicNumber);
@@ -304,6 +306,40 @@ int init()
   {
     UpdatesRisk = Risk; // reset to default risk size
     if(OnJournaling) Print("Updated Risk: ", UpdatesRisk);
+  }
+
+  if(IsTestMode && OnChartShots)
+  {
+    // Delete all screenshot files in the ScreenShots folder
+    string folderPath = "ScreenShots\\*";
+    string filename;
+    long search_handle = FileFindFirst(folderPath, filename);
+
+    if(search_handle != INVALID_HANDLE)
+    {
+      do
+      {
+        if(filename != "." && filename != "..")
+        {
+          string fullPath = "ScreenShots\\" + filename;
+          if(FileDelete(fullPath))
+          {
+            Print("Deleted screenshot: ", fullPath);
+          }
+          else
+          {
+            Print("Failed to delete: ", fullPath);
+          }
+        }
+      }
+      while(FileFindNext(search_handle, filename));
+      
+      FileFindClose(search_handle);
+    }
+    else
+    {
+      Print("No screenshot files found or failed to access ScreenShots folder");
+    }
   }
 
    start();
@@ -481,6 +517,7 @@ int start()
 //--------- Check if its a new bar -------------------------
     if(!isNewBar() && Trigger==0)
       return (0);
+
 //----------Order management through R - to avoid slow down the system only enable with external parameters
    if(R_Management)
      {
@@ -492,7 +529,10 @@ int start()
       //   Direction = ReadAutoPrediction(MagicNumber, -1);             //get prediction from R for trade direction         
      }
 
-   SaveChart();
+   SaveChart(); // for debugging
+
+   OrderProfitToCSV(currentTerminal);
+
 //----------states update-----------
 // variables to reset
    OrderNumber=0; // OrderNumber used in Entry Rules
