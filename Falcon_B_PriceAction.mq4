@@ -27,6 +27,7 @@ extern bool    R_Management                     = False;      //R_Management tru
 extern int     Slippage                         = 0; // Slippage in Pips
 extern bool    IsECNbroker                      = False; // Is your broker an ECN
 extern bool    OnJournaling                     = True; // Add EA updates in the Journal Tab
+extern bool    OnChartShots                     = False; // Add EA updates in the Chart Shots
 extern bool    IsTestMode                       = False; // Enable test mode
 
 extern string  Header3="----------Position Sizing Settings-----------";
@@ -382,6 +383,14 @@ int start()
     // lastOrderClosedByStopLoss = false;
     IsMeanReversal = false;
 
+    static int lastOrder = 0;
+    int newClosedOrder = GetLastClosedOrderToday(MagicNumber);
+    if(lastOrder!=newClosedOrder)
+    {
+      lastOrder = newClosedOrder;
+      SaveChart();
+    }
+
     // If there are no open positions and we found a losing trade in history
     if(!lastOrderClosedByStopLoss)
     {
@@ -391,8 +400,6 @@ int start()
       datetime now = TimeCurrent();
       if(GetBarProfitByTime(now, MagicNumber, profit, type, price,Symbol())) // Check if there was a losing trade
       {
-        SaveChart();
-        
         if(profit < 0)
         {
           if(type==OP_BUY)
@@ -483,9 +490,9 @@ int start()
          OrderProfitToCSV(terminalNum);                        //write previous orders profit results for auto analysis in R
          TradeAllowed = ReadCommandFromCSV(terminalNum);              //read command from R to make sure trading is allowed
       //   Direction = ReadAutoPrediction(MagicNumber, -1);             //get prediction from R for trade direction         
-        
-       
      }
+
+   SaveChart();
 //----------states update-----------
 // variables to reset
    OrderNumber=0; // OrderNumber used in Entry Rules
@@ -500,7 +507,7 @@ int start()
   
     if(!IsTestMode && !TradeController.IsTradingEnabled())
       {
-        Print("Trading is disabled, click the button to enable trading.");
+        if(OnJournaling) Print("Trading is disabled, click the button to enable trading.");
         return (0);
       } 
 
@@ -591,7 +598,7 @@ int start()
       // }
     }
 
-   if(UseReversal && lastOrderClosedByStopLoss)
+   if(UseReversal && !lastOrderClosedByStopLoss)
    {
       if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (paState.trendState == DOWN_TREND || IsBearishPinBar(1)))
       {
@@ -714,10 +721,9 @@ int start()
         if(UseMeanReversalATR)
           MeanReversalDistancePoints = MeanReversalATRMultiplier * myATR / Point;
 
-        if(peaksState.trendState == UP_TREND)
+        if(peaksState.trendState == UP_TREND || peaksState.trendState == DOWN_TREND_RETRACEMENT)
         {
-          if(((Close[1] > prev_ner_hi_zone_P1 + BreakoutMarginPoints*Point) && (peaksState.peakClose1 < prev_ner_hi_zone_P1)) ||
-            ((Close[1] > prev_ner_hi_zone_P2 + BreakoutMarginPoints*Point) &&  (peaksState.peakClose1 < prev_ner_hi_zone_P2)))
+          if((Close[1] > prev_ner_hi_zone_P1 + BreakoutMarginPoints*Point) && (peaksState.peakClose1 < prev_ner_hi_zone_P1))
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 1;
@@ -732,10 +738,9 @@ int start()
             Trigger = 1; // Set trigger for mean reversal
           }
         }
-        else if (peaksState.trendState == DOWN_TREND)
+        else if (peaksState.trendState == DOWN_TREND  || peaksState.trendState == UP_TREND_RETRACEMENT)
         {
-          if (((Close[1] < prev_ner_lo_zone_P2 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P2)) ||
-            ((Close[1] < prev_ner_lo_zone_P1 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P1)))
+          if ((Close[1] < prev_ner_lo_zone_P2 - BreakoutMarginPoints*Point) && (peaksState.peakClose1 > prev_ner_lo_zone_P2))
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 2;
@@ -793,17 +798,17 @@ int start()
           Stop=(MathMax(Low[1],High[1])-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
-          Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
+          // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
           {
             if(Stop<MinStopLoss) 
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              Print("Stop too small, using ATR for Stop Loss: ", Stop);
+              if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", Stop);
             }
             else if(Stop>2*myATR) // If the stop is too large, use ATR
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              Print("Stop is too large, using ATR for Stop Loss: ", Stop);
+              if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", Stop);
             }
           }
         }
@@ -828,6 +833,11 @@ int start()
       Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,PipFactor);
     }
 
+    if(lastOrderClosedByStopLoss)
+    {
+      Take = 0.5 * Take;
+    }
+
     // check if Take is close to supply or demand zone, not in breakout
     if((UseSupplyDemandPoints || UseSupplyDemandATR) && Trigger > 0 && BreakoutState!=BO_TRIGGERED)
     {
@@ -839,7 +849,7 @@ int start()
           Take = (MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
           if(Take < supplyDemandMarginPoints / PipFactor) // Ensure Take is not too small
           {
-            Print("Take Profit is too close to supply zone, canceling signal");
+            if(OnJournaling) Print("Take Profit is too close to supply zone, canceling signal");
             Trigger = 0; //Cancel signal
           }
         }
@@ -852,7 +862,7 @@ int start()
         Take = (MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point)/(PipFactor*Point); // Adjust Take Profit to be below the demand zone
         if(Take < supplyDemandMarginPoints / PipFactor) // Ensure Take is not too small
         {
-          Print("Take Profit is too close to demand zone, canceling signal");
+          if(OnJournaling) Print("Take Profit is too close to demand zone, canceling signal");
           Trigger = 0; //Cancel signal
         }
       }
@@ -1007,8 +1017,6 @@ int start()
       }
     }
 
-    SaveChart();
-           
 
 //----------Pending Order Management-----------
 /*
@@ -1221,7 +1229,8 @@ double CheckLot(double Lot,bool Journaling)
    if(LotToOpen>MarketInfo(Symbol(),MODE_MAXLOT))LotToOpen=MarketInfo(Symbol(),MODE_MAXLOT);
    LotToOpen=NormalizeDouble(LotToOpen,2);
 
-   if(Journaling && LotToOpen!=Lot)Print("Trading Lot has been changed by CheckLot function. Requested lot: "+(string)Lot+". Lot to open: "+(string)LotToOpen);
+   if(Journaling && LotToOpen!=Lot)
+    if(OnJournaling) Print("Trading Lot has been changed by CheckLot function. Requested lot: "+(string)Lot+". Lot to open: "+(string)LotToOpen);
 
    return(LotToOpen);
   }
@@ -1297,11 +1306,30 @@ int OpenPositionMarket(int TYPE,double LOT,double SL,double TP,int Magic,int Sli
    string symbol=Symbol();
    int cmd=TYPE;
    double volume=LOT; //CheckLot(LOT,Journaling);
-   if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume > AccountFreeMargin())
-     {
-      Print("Can not open a trade. Not enough free margin to open "+(string)volume+" on "+symbol, ", margin required: ", MarketInfo(symbol,MODE_MARGINREQUIRED), " volume: ", volume, " free margin: ", AccountFreeMargin());
+  if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume > AccountFreeMargin())
+  {
+    // Calculate maximum possible volume based on available margin
+    double maxVolume = AccountFreeMargin() / MarketInfo(symbol,MODE_MARGINREQUIRED);
+    
+    // Apply safety margin (use 90% of available margin)
+    maxVolume = maxVolume * 0.9;
+    
+   // Normalize to broker's lot step
+   double lotStep = MarketInfo(symbol, MODE_LOTSTEP);
+   double minLot = MarketInfo(symbol, MODE_MINLOT);
+   
+   volume = MathFloor(maxVolume / lotStep) * lotStep;
+   
+   if(volume < minLot)
+   {
+      Print("Insufficient margin even for minimum lot size. Required: ", MarketInfo(symbol,MODE_MARGINREQUIRED), 
+            " Available: ", AccountFreeMargin());
       return(-1);
-     }
+   }
+   
+   if(Journaling) Print("Volume adjusted due to insufficient margin. Original: ", LOT, 
+                       " Adjusted: ", volume, " Free margin: ", AccountFreeMargin());
+  }
    int slippage=Slip*K; // Slippage is in points. 1 point = 0.0001 on 4 digit broker and 0.00001 on a 5 digit broker
    string comment=" "+(string)TYPE+"(#"+(string)Magic+")";
    int magic=Magic;
@@ -1443,11 +1471,30 @@ int OpenPositionPending(int TYPE,double OpenPrice,datetime expiration,double LOT
    string symbol=Symbol();
    int cmd=TYPE;
    double volume=LOT; //CheckLot(LOT,Journaling);
-   if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume>AccountFreeMargin())
-     {
-      Print("Can not open a trade. Not enough free margin to open "+(string)volume+" on "+symbol);
+  if(MarketInfo(symbol,MODE_MARGINREQUIRED)*volume > AccountFreeMargin())
+  {
+    // Calculate maximum possible volume based on available margin
+    double maxVolume = AccountFreeMargin() / MarketInfo(symbol,MODE_MARGINREQUIRED);
+    
+    // Apply safety margin (use 90% of available margin)
+    maxVolume = maxVolume * 0.9;
+    
+   // Normalize to broker's lot step
+   double lotStep = MarketInfo(symbol, MODE_LOTSTEP);
+   double minLot = MarketInfo(symbol, MODE_MINLOT);
+   
+   volume = MathFloor(maxVolume / lotStep) * lotStep;
+   
+   if(volume < minLot)
+   {
+      Print("Insufficient margin even for minimum lot size. Required: ", MarketInfo(symbol,MODE_MARGINREQUIRED), 
+            " Available: ", AccountFreeMargin());
       return(-1);
-     }
+   }
+   
+   if(Journaling) Print("Volume adjusted due to insufficient margin. Original: ", LOT, 
+                       " Adjusted: ", volume, " Free margin: ", AccountFreeMargin());
+  }
    int slippage=Slip*K; // Slippage is in points. 1 point = 0.0001 on 4 digit broker and 0.00001 on a 5 digit broker
    string comment=" "+(string)TYPE+"(#"+(string)Magic+")";
    int magic=Magic;
@@ -2961,6 +3008,9 @@ void OnChartEvent(const int id,
 
 void SaveChart()
 {
+  if(!OnChartShots)
+    return;
+
   datetime current_time = TimeCurrent();
   string time_str = StringFormat("%04d.%02d.%02d %02d-%02d-%02d",
       TimeYear(current_time),

@@ -217,19 +217,21 @@ def find_closest_chart(target_time, chart_images):
     min_diff = float('inf')
     
     for img_time, img_path in chart_images.items():
-        diff = abs((target_time - img_time).total_seconds())
-        if diff < min_diff and diff <= 60:  # 1 minute tolerance
-            min_diff = diff
+        diff = abs((target_time - img_time).total_minutes())
+        if diff == 0:  # 1 minute tolerance
             closest_image = img_path
+            break
 
     return closest_image
 
 # Usage example
 if __name__ == "__main__":
-    symbol = "BTCUSD"
+    symbol = "DE500"
     date = "2025.08.22"
+    mode = "MQL4"
 
-    root_folder = Path(r"C:\Users\Ofer Kruzel\AppData\Roaming\MetaQuotes\Terminal\0A89B723E9501DAD3F2D5CB4F27EBDAB\MQL4")
+    root_folder = Path(r"C:\Users\Ofer Kruzel\AppData\Roaming\MetaQuotes\Terminal\0A89B723E9501DAD3F2D5CB4F27EBDAB")
+    root_folder = root_folder / mode
     logs_folder = root_folder / "Logs"
     images_folder = root_folder / "Files" / "ScreenShots" / symbol
 
