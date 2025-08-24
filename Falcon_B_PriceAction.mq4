@@ -142,12 +142,12 @@ extern double  supplyDemandMarginATR            = 0.3;       // Supply / Demand 
 extern string  Header18="----------Trend rules settings-----------";
 extern bool    UseReversal                      = True;     // Use Reversal 
 
-extern string  Header19="----------Mean reversal settings-----------";
-extern bool    UseMeanReversalPoints            = False;     // Use Mean Reversal (Points)
-extern int     MeanReversalDistancePoints       = 5;       // Mean Reversal Distance (Points)
-extern bool    UseMeanReversalATR               = True;     // Use Mean Reversal (ATR)
-extern double  MeanReversalATRMultiplier        = 1;      // Mean Reversal ATR Multiplier
-extern double  MeanReversalLoHiDistance         = 5;    // Mean Reversal Low-High Distance Multiplier (in ATR units)
+// extern string  Header19="----------Mean reversal settings-----------";
+// extern bool    UseMeanReversalPoints            = False;     // Use Mean Reversal (Points)
+// extern int     MeanReversalDistancePoints       = 5;       // Mean Reversal Distance (Points)
+// extern bool    UseMeanReversalATR               = False;     // Use Mean Reversal (ATR)
+// extern double  MeanReversalATRMultiplier        = 1;      // Mean Reversal ATR Multiplier
+// extern double  MeanReversalLoHiDistance         = 5;    // Mean Reversal Low-High Distance Multiplier (in ATR units)
 
 extern string  Header21="----------Trading time settings-----------";
 extern int     TradingStartHour                 = 0;        // Start hour for trading (0-23)
@@ -758,8 +758,8 @@ int start()
         // Print("Close[1]: ", Close[1], " ,hi P1 + margin: ", ner_hi_zone_P1 + BreakoutMarginPoints*Point, " ,hi P2 + margin: ", ner_hi_zone_P2 + BreakoutMarginPoints*Point);
         // Print("Close[1]: ", Close[1], " ,lo P1 - margin: ", ner_lo_zone_P1 - BreakoutMarginPoints*Point, " ,lo P2 - margin: ", ner_lo_zone_P2 - BreakoutMarginPoints*Point);
 
-        if(UseMeanReversalATR)
-          MeanReversalDistancePoints = MeanReversalATRMultiplier * myATR / Point;
+        // if(UseMeanReversalATR)
+        //   MeanReversalDistancePoints = MeanReversalATRMultiplier * myATR / Point;
 
         if(peaksState.trendState == UP_TREND || peaksState.trendState == DOWN_TREND_RETRACEMENT)
         {
@@ -769,14 +769,14 @@ int start()
             Trigger = 1;
             if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
           }
-          else if((UseMeanReversalATR || UseMeanReversalPoints) && 
-                  (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
-                  (Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point || Close[2] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point)) // Check for mean reversal condition
-          {
-            IsMeanReversal = true; // Set flag for mean reversal condition
-            if(OnJournaling) Print("Mean Reversal Condition - BUY above supply line");
-            Trigger = 1; // Set trigger for mean reversal
-          }
+          // else if((UseMeanReversalATR || UseMeanReversalPoints) && 
+          //         (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
+          //         (Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point || Close[2] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point)) // Check for mean reversal condition
+          // {
+          //   IsMeanReversal = true; // Set flag for mean reversal condition
+          //   if(OnJournaling) Print("Mean Reversal Condition - BUY above supply line");
+          //   Trigger = 1; // Set trigger for mean reversal
+          // }
         }
         else if (peaksState.trendState == DOWN_TREND  || peaksState.trendState == UP_TREND_RETRACEMENT)
         {
@@ -786,14 +786,14 @@ int start()
             Trigger = 2;
             if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
           } 
-          else if((UseMeanReversalATR || UseMeanReversalPoints) && 
-                  (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
-                  (Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point || Close[2] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point)) // Check for mean reversal condition
-          {
-            IsMeanReversal = true; // Set flag for mean reversal condition
-            if(OnJournaling) Print("Mean Reversal Condition - SELL below demand line");
-            Trigger = 2; // Set trigger for mean reversal
-          }
+          // else if((UseMeanReversalATR || UseMeanReversalPoints) && 
+          //         (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
+          //         (Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point || Close[2] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point)) // Check for mean reversal condition
+          // {
+          //   IsMeanReversal = true; // Set flag for mean reversal condition
+          //   if(OnJournaling) Print("Mean Reversal Condition - SELL below demand line");
+          //   Trigger = 2; // Set trigger for mean reversal
+          // }
         }
       }
 
