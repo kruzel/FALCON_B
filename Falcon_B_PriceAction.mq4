@@ -37,7 +37,10 @@ extern double  Risk                             = 1; // Risk per trade (%)
 extern int     MaxPositionsAllowed              = 1;
 extern double  MaxSpread                        = 50; // Maximum spread (Pips)
 extern bool    UseMaxSpreadATR                  = True;
+extern double  MaxSpreadATRMultiplier           = 3.0; // Maximum spread (ATR Multiplier)
 extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
+
+extern string  Header23="----------Arears Management Settings-----------";
 extern bool    IsArearsManagementEnabled          = True; // Enable Arears Money Management
 extern double  ArearsMMSizeIncrement            = 0.5; // Arears Money Management increment %
 
@@ -767,7 +770,7 @@ int start()
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 1;
-            if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply or demand line");
+            if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply line");
           }
           // else if((UseMeanReversalATR || UseMeanReversalPoints) && 
           //         (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
@@ -784,7 +787,7 @@ int start()
           {
             BreakoutState = BO_TRIGGERED; // set breakout flag
             Trigger = 2;
-            if(OnJournaling) Print("Entry Signal - breakout, SELL below supply or demand line");
+            if(OnJournaling) Print("Entry Signal - breakout, SELL below demand line");
           } 
           // else if((UseMeanReversalATR || UseMeanReversalPoints) && 
           //         (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
@@ -923,85 +926,83 @@ int start()
      }
 
 //----------Entry Rules (Market and Pending) -----------
-   if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber) == True) 
-   {
-      lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
-      if(OnJournaling) Print("Loss limit breached, no new trades will be opened until reset.");
-      return (0);
-   }
-
-   if(IsWinLimitBreached(IsWinLimitActivated,WinLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber)==True) 
-   {
-      lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
-      if(OnJournaling) Print("Win limit breached, no new trades will be opened until reset.");
-      return (0);
-   }
-
-   if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==True)
-   {
-      lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
-      if(OnJournaling) Print("Volatility limit breached, no new trades will be opened until reset.");
-      return (0); // Exit if volatility limit is breached
-   }
-
-   if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==True)
-   {
-      // if(OnJournaling) Print("Max positions reached, cannot open new trades.");
-      lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
-      return (0);
-   }
-
-   if(UseSupplyDemandPoints || UseSupplyDemandATR)
-   {
-      if(Trigger == 1 && prev_ner_hi_zone_P1 >= 99999 && prev_ner_hi_zone_P2 >= 99999)
-        BreakoutState = BO_TRIGGERED;
-      if(Trigger == 2 && MathAbs(prev_ner_lo_zone_P1) >= 99999 && MathAbs(prev_ner_lo_zone_P2) >= 99999)
-        BreakoutState = BO_TRIGGERED;
-   }
-
-   if(!IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
+   if(Trigger>0)
+   {  
+    if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber) == True) 
     {
-        BreakoutState = BO_WAITING;
-        lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
-        if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
-        return (0); // Exit without opening new trades
-      }
-
-    if(!lastOrderClosedByStopLoss && UsePipFiniteEntry && !IsAfterExit && !IsMeanReversal) // pip finite rules apply only for new trades
-    {
-      if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
-      {
-        Trigger = 0; // Reset to no signal
-        if(OnJournaling) Print("SELL signal canceled - only buy allowed above pipFinite line");
-        return (0); // Exit if no valid signal
-      }
-      else if(Close[1] < pipFiniteLine && Trigger == 1) // ignore buy signals below the PipFinite line
-      {
-        Trigger = 0; // Reset to no signal
-        if(OnJournaling) Print("BUY signal canceled - only sell allowed below pipFinite line");
-        return (0); // Exit if no valid signal
-      }
+        // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
+        if(OnJournaling) Print("Loss limit breached, no new trades will be opened until reset.");
+        return (0);
     }
 
-    if(UseMaxSpreadATR)
+    if(IsWinLimitBreached(IsWinLimitActivated,WinLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber)==True) 
     {
-      if (currentSpread  > myATR / Point / 3)
+        // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
+        if(OnJournaling) Print("Win limit breached, no new trades will be opened until reset.");
+        return (0);
+    }
+
+    if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==True)
+    {
+        // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
+        if(OnJournaling) Print("Volatility limit breached, no new trades will be opened until reset.");
+        return (0); // Exit if volatility limit is breached
+    }
+
+    if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==True)
+    {
+        // if(OnJournaling) Print("Max positions reached, cannot open new trades.");
+        // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
+        return (0);
+    }
+
+    if(UseSupplyDemandPoints || UseSupplyDemandATR)
+    {
+        // if(OnJournaling) Print("Checking breakout conditions, Trigger: ", Trigger, ", prev_ner_hi_zone_P1: ", prev_ner_hi_zone_P1, ", prev_ner_hi_zone_P2: ", prev_ner_hi_zone_P2, ", prev_ner_lo_zone_P1: ", prev_ner_lo_zone_P1, ", prev_ner_lo_zone_P2: ", prev_ner_lo_zone_P2);
+        if(Trigger == 1 && prev_ner_hi_zone_P1 == 999999 && prev_ner_hi_zone_P2 == 999999)
+          BreakoutState = BO_TRIGGERED;
+        if(Trigger == 2 && prev_ner_lo_zone_P1 == 0 && prev_ner_lo_zone_P2 == 0)
+          BreakoutState = BO_TRIGGERED;
+    }
+
+    if(!IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
       {
-        if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. ATR: ", myATR / (PipFactor*Point), " pips");
+          BreakoutState = BO_WAITING;
+          // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
+          if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
+          return (0); // Exit without opening new trades
+        }
+
+      if(!lastOrderClosedByStopLoss && UsePipFiniteEntry && !IsAfterExit && !IsMeanReversal) // pip finite rules apply only for new trades
+      {
+        if(Close[1] > pipFiniteLine && Trigger == 2) // ignore sell signals above the PipFinite line
+        {
+          Trigger = 0; // Reset to no signal
+          if(OnJournaling) Print("SELL signal canceled - only buy allowed above pipFinite line");
+          return (0); // Exit if no valid signal
+        }
+        else if(Close[1] < pipFiniteLine && Trigger == 1) // ignore buy signals below the PipFinite line
+        {
+          Trigger = 0; // Reset to no signal
+          if(OnJournaling) Print("BUY signal canceled - only sell allowed below pipFinite line");
+          return (0); // Exit if no valid signal
+        }
+      }
+
+      if(UseMaxSpreadATR)
+      {
+        if (currentSpread  > myATR / Point / MaxSpreadATRMultiplier)
+        {
+          if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. ATR: ", myATR / (PipFactor*Point), " pips");
+          return (0); // Exit if spread is too high
+        }
+      }
+      else if( currentSpread  > MaxSpread * PipFactor )
+      {
+        if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. Max allowed: ", MaxSpread, " pips");
         return (0); // Exit if spread is too high
       }
     }
-    else if( currentSpread  > MaxSpread * PipFactor )
-     {
-      if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. Max allowed: ", MaxSpread, " pips");
-      return (0); // Exit if spread is too high
-     }
-
-    // if(Trigger != 0 && Stop==0)
-    // {
-    //   Print("Stop Loss is zero, cannot calculate position size");
-    //   return (0); // Exit if Stop Loss is zero
-    // }
 
 // ---------- positions processing ----------
 
