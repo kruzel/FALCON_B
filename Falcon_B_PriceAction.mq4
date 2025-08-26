@@ -51,7 +51,7 @@ extern bool    IsWinLimitActivated              = True; // Enable Max Win Limit
 extern double  WinLimitPercent                  = 3.0; // Win Limit (%)
 
 extern string  Header20="----------Breakout settings -----------";
-extern int     MaxConsecutiveFailures           = 2; // Max consecutive failures, then wait for breakout
+extern int     MaxConsecutiveFailures           = 99; // Max consecutive failures, then wait for breakout
 extern bool    UseBreakoutPoints                = False;
 extern int     BreakoutMarginPoints             = 10; // Breakout Margin (Points)
 extern bool    UseBreakoutATR                   = True;
@@ -60,9 +60,9 @@ extern double  BreakoutMarginATRMultiplier      = 0.2; // Breakout Distance (ATR
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
-extern double  MinStopLoss                      = 1; // Minimum Stop Loss in Pips else ATR
+extern double  MinStopLossATRMultiplier         = 0.3; // Min Stop Loss ATR multiplier
+extern double  MaxStopLossATRMultiplier         = 1; // Max Stop Loss ATR Multiplier
 extern double  StopBarMargin                    = 10; // stop loss margin (% bar size)
-
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
 extern bool    IsVolatilityStopOn               = False;
@@ -145,12 +145,12 @@ extern double  supplyDemandMarginATR            = 0.3;       // Supply / Demand 
 extern string  Header18="----------Trend rules settings-----------";
 extern bool    UseReversal                      = True;     // Use Reversal 
 
-// extern string  Header19="----------Mean reversal settings-----------";
-// extern bool    UseMeanReversalPoints            = False;     // Use Mean Reversal (Points)
-// extern int     MeanReversalDistancePoints       = 5;       // Mean Reversal Distance (Points)
-// extern bool    UseMeanReversalATR               = False;     // Use Mean Reversal (ATR)
-// extern double  MeanReversalATRMultiplier        = 1;      // Mean Reversal ATR Multiplier
-// extern double  MeanReversalLoHiDistance         = 5;    // Mean Reversal Low-High Distance Multiplier (in ATR units)
+extern string  Header19="----------Mean reversal settings-----------";
+extern bool    UseMeanReversalPoints            = False;     // Use Mean Reversal (Points)
+extern int     MeanReversalDistancePoints       = 5;       // Mean Reversal Distance (Points)
+extern bool    UseMeanReversalATR               = False;     // Use Mean Reversal (ATR)
+extern double  MeanReversalATRMultiplier        = 1;      // Mean Reversal ATR Multiplier
+extern double  MeanReversalLoHiDistance         = 5;    // Mean Reversal Low-High Distance Multiplier (in ATR units)
 
 extern string  Header21="----------Trading time settings-----------";
 extern int     TradingStartHour                 = 0;        // Start hour for trading (0-23)
@@ -436,24 +436,28 @@ int start()
       double price;
       double profit;
       int type;
+      CloseReason closeReason;
       datetime now = TimeCurrent();
-      if(GetBarProfitByTime(now, MagicNumber, profit, type, price,Symbol())) // Check if there was a losing trade
+      if(GetBarProfitByTime(now, MagicNumber, profit, type, price, closeReason, Symbol())) // Check if there was a losing trade
       {
         if(profit < 0)
         {
-          if(type==OP_BUY)
+          if(closeReason == StopLoss)
           {
-            // Last trade was a losing buy, trigger a sell
-            Trigger = 2;
-            if(OnJournaling) Print("Entry Signal - SELL after losing BUY trade");
+            if(type==OP_BUY)
+            {
+              // Last trade was a losing buy, trigger a sell
+              Trigger = 2;
+              if(OnJournaling) Print("Entry Signal - SELL after losing BUY trade");
+            }
+            else if(type==OP_SELL) 
+            {
+              // Last trade was a losing sell, trigger a buy
+              Trigger = 1;
+              if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
+            }
+            lastOrderClosedByStopLoss = true; // Store the last order profit}
           }
-          else if(type==OP_SELL) 
-          {
-            // Last trade was a losing sell, trigger a buy
-            Trigger = 1;
-            if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
-          }
-          lastOrderClosedByStopLoss = true; // Store the last order profit}
 
           if(IsArearsManagementEnabled)
           {
@@ -471,11 +475,6 @@ int start()
                   if(OnJournaling) Print("Arears Money Management - Updated Risk: ", UpdatesRisk);
                 }
             }
-          }
-          else
-          {
-              UpdatesRisk = Risk;
-              if(OnJournaling) Print("Arears Money Management - Updated Risk: ", UpdatesRisk);
           }
 
           VisualizeResultOverlay(now, 2, price);
@@ -617,28 +616,28 @@ int start()
       }
 
       //check breakout
-      // if(paState.trendState == UP_TREND && BreakoutState == BO_WAITING)
-      // {
-      //     // if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPoints*Point);
-      //     PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
-      //     if(Close[1] > peaksState.peakCloseHighest + BreakoutMarginPoints*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
-      //     {
-      //       BreakoutState = BO_TRIGGERED; // set breakout flag
-      //       Trigger = 1; // Buy signal
-      //       if(OnJournaling) Print("Entry Signal - BUY on breakout");
-      //     }
-      // }
-      // else if(paState.trendState == DOWN_TREND && BreakoutState == BO_WAITING)
-      // {
-      //     // if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPoints*Point);
-      //     PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
-      //     if(Close[1] < peaksState.peakCloseLowest - BreakoutMarginPoints*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
-      //     {
-      //       BreakoutState = BO_TRIGGERED; // set breakout flag
-      //       Trigger = 2; // Sell signal
-      //       if(OnJournaling) Print("Entry Signal - SELL on breakout");
-      //     }
-      // }
+      if(paState.trendState == UP_TREND && BreakoutState == BO_WAITING)
+      {
+          // if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPoints*Point);
+          PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
+          if(Close[1] > peaksState.peakCloseHighest + BreakoutMarginPoints*Point && peaksState.peakStateHighest==HIGHER_HIGH_PEAK)
+          {
+            BreakoutState = BO_TRIGGERED; // set breakout flag
+            Trigger = 1; // Buy signal
+            if(OnJournaling) Print("Entry Signal - BUY on breakout");
+          }
+      }
+      else if(paState.trendState == DOWN_TREND && BreakoutState == BO_WAITING)
+      {
+          // if(OnJournaling) Print("checking breakout, margin: ", BreakoutMarginPoints*Point);
+          PriceActionState peaksState = PriceActionStates.GetPrevPeaks();
+          if(Close[1] < peaksState.peakCloseLowest - BreakoutMarginPoints*Point && peaksState.peakStateLowest==LOWER_LOW_PEAK)
+          {
+            BreakoutState = BO_TRIGGERED; // set breakout flag
+            Trigger = 2; // Sell signal
+            if(OnJournaling) Print("Entry Signal - SELL on breakout");
+          }
+      }
     }
 
    if(UseReversal && !lastOrderClosedByStopLoss)
@@ -761,8 +760,8 @@ int start()
         // Print("Close[1]: ", Close[1], " ,hi P1 + margin: ", ner_hi_zone_P1 + BreakoutMarginPoints*Point, " ,hi P2 + margin: ", ner_hi_zone_P2 + BreakoutMarginPoints*Point);
         // Print("Close[1]: ", Close[1], " ,lo P1 - margin: ", ner_lo_zone_P1 - BreakoutMarginPoints*Point, " ,lo P2 - margin: ", ner_lo_zone_P2 - BreakoutMarginPoints*Point);
 
-        // if(UseMeanReversalATR)
-        //   MeanReversalDistancePoints = MeanReversalATRMultiplier * myATR / Point;
+        if(UseMeanReversalATR)
+          MeanReversalDistancePoints = MeanReversalATRMultiplier * myATR / Point;
 
         if(peaksState.trendState == UP_TREND || peaksState.trendState == DOWN_TREND_RETRACEMENT)
         {
@@ -772,14 +771,14 @@ int start()
             Trigger = 1;
             if(OnJournaling) Print("Entry Signal - breakout,  BUY above supply line");
           }
-          // else if((UseMeanReversalATR || UseMeanReversalPoints) && 
-          //         (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
-          //         (Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point || Close[2] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point)) // Check for mean reversal condition
-          // {
-          //   IsMeanReversal = true; // Set flag for mean reversal condition
-          //   if(OnJournaling) Print("Mean Reversal Condition - BUY above supply line");
-          //   Trigger = 1; // Set trigger for mean reversal
-          // }
+          else if((UseMeanReversalATR || UseMeanReversalPoints) && 
+                  (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
+                  (Close[1] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point || Close[2] < prev_ner_lo_zone_P1 + MeanReversalDistancePoints*Point)) // Check for mean reversal condition
+          {
+            IsMeanReversal = true; // Set flag for mean reversal condition
+            if(OnJournaling) Print("Mean Reversal Condition - BUY above supply line");
+            Trigger = 1; // Set trigger for mean reversal
+          }
         }
         else if (peaksState.trendState == DOWN_TREND  || peaksState.trendState == UP_TREND_RETRACEMENT)
         {
@@ -789,14 +788,14 @@ int start()
             Trigger = 2;
             if(OnJournaling) Print("Entry Signal - breakout, SELL below demand line");
           } 
-          // else if((UseMeanReversalATR || UseMeanReversalPoints) && 
-          //         (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
-          //         (Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point || Close[2] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point)) // Check for mean reversal condition
-          // {
-          //   IsMeanReversal = true; // Set flag for mean reversal condition
-          //   if(OnJournaling) Print("Mean Reversal Condition - SELL below demand line");
-          //   Trigger = 2; // Set trigger for mean reversal
-          // }
+          else if((UseMeanReversalATR || UseMeanReversalPoints) && 
+                  (prev_ner_hi_zone_P2 - prev_ner_lo_zone_P1 > MeanReversalLoHiDistance*myATR) &&
+                  (Close[1] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point || Close[2] > prev_ner_hi_zone_P2 - MeanReversalDistancePoints*Point)) // Check for mean reversal condition
+          {
+            IsMeanReversal = true; // Set flag for mean reversal condition
+            if(OnJournaling) Print("Mean Reversal Condition - SELL below demand line");
+            Trigger = 2; // Set trigger for mean reversal
+          }
         }
       }
 
@@ -824,12 +823,12 @@ int start()
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
           // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
           {
-            if(Stop<MinStopLoss) 
+            if(Stop<MinStopLossATRMultiplier*myATR) 
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               Print("Stop too small, using ATR for Stop Loss: ", Stop);
             } 
-            else if(Stop>2*myATR) // If the stop is too large, use ATR
+            else if(Stop>MaxStopLossATRMultiplier*myATR) // If the stop is too large, use ATR
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               Print("Stop is too large, using ATR for Stop Loss: ", Stop);
@@ -843,12 +842,12 @@ int start()
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
           // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
           {
-            if(Stop<MinStopLoss) 
+            if(Stop<MinStopLossATRMultiplier*myATR) 
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", Stop);
             }
-            else if(Stop>2*myATR) // If the stop is too large, use ATR
+            else if(Stop>MaxStopLossATRMultiplier*myATR) // If the stop is too large, use ATR
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", Stop);
