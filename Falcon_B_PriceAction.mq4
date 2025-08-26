@@ -457,23 +457,23 @@ int start()
               if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
             }
             lastOrderClosedByStopLoss = true; // Store the last order profit}
-          }
 
-          if(IsArearsManagementEnabled)
-          {
-            int losses = GetConsecutiveFailureCount(MagicNumber);
-            if(losses > 0)
+            if(IsArearsManagementEnabled)
             {
-                UpdatesRisk = Risk + ArearsMMSizeIncrement * losses;
-                if(OnJournaling) Print("Losses count: ", losses, " Updated Risk: ", UpdatesRisk);
-            }
-            else
-            {
-                if(UpdatesRisk>Risk)
-                {
-                  UpdatesRisk = UpdatesRisk - ArearsMMSizeIncrement; // reset to default risk size
-                  if(OnJournaling) Print("Arears Money Management - Updated Risk: ", UpdatesRisk);
-                }
+              int losses = GetConsecutiveFailureCount(MagicNumber);
+              if(losses > 0)
+              {
+                  UpdatesRisk = Risk + ArearsMMSizeIncrement * losses;
+                  if(OnJournaling) Print("Losses count: ", losses, " Updated Risk: ", UpdatesRisk);
+              }
+              else
+              {
+                  if(UpdatesRisk>Risk)
+                  {
+                    UpdatesRisk = UpdatesRisk - ArearsMMSizeIncrement; // reset to default risk size
+                    if(OnJournaling) Print("Arears Money Management - Updated Risk: ", UpdatesRisk);
+                  }
+              }
             }
           }
 
@@ -642,17 +642,28 @@ int start()
 
    if(UseReversal && !lastOrderClosedByStopLoss)
    {
-      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (paState.trendState == DOWN_TREND || IsBearishPinBar(1)))
+      if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (paState.trendState == DOWN_TREND))
       {
          Trigger = 2; // Sell signal
          if(OnJournaling) Print("Exit Signal - SELL on reversal to DOWN_TREND");
       }
-      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (paState.trendState == UP_TREND || IsBullishPinBar(1)))
+      else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (paState.trendState == UP_TREND))
       {
          Trigger = 1; // Buy signal
          if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND");
       }
    } 
+
+    if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (IsBearishPinBar(1)))
+    {
+        Trigger = 2; // Sell signal
+        if(OnJournaling) Print("Exit Signal - SELL on reversal to DOWN_TREND due to bearish pin bar");
+    }
+    else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (IsBullishPinBar(1)))
+    {
+        Trigger = 1; // Buy signal
+        if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND due to bullish pin bar");
+    }
       
    // support resistance exit rules
    if(UseSupportResistance && !lastOrderClosedByStopLoss)
