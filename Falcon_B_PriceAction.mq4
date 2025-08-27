@@ -24,7 +24,7 @@ extern string  Header1="----------EA General Settings-----------";
 extern int     MagicNumber                      = 8118201;
 extern int     TerminalType                     = 1;         //0 mean slave, 1 mean master
 extern bool    R_Management                     = False;      //R_Management true will enable Decision Support Centre (using R)
-extern int     Slippage                         = 0; // Slippage in Pips
+extern int     Slippage                         = 2; // Slippage in Pips
 extern bool    IsECNbroker                      = False; // Is your broker an ECN
 extern bool    OnJournaling                     = True; // Add EA updates in the Journal Tab
 extern bool    OnChartShots                     = False; // Add EA updates in the Chart Shots
@@ -833,11 +833,11 @@ int start()
     {
       if(Trigger==1) // Buy
         {
-          double min2 = MathMin(Low[2],High[2]);
+          // double min2 = MathMin(Low[2],High[2]);
           double min1 = MathMin(Low[1],High[1]);
           double min0 = MathMin(Low[0],High[0]);
           double min = MathMin(min1,min0);
-          min = MathMin(min, min2);
+          // min = MathMin(min, min2);
           
           Stop=(Ask - min)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
@@ -858,11 +858,11 @@ int start()
         } 
         else if(Trigger==2) 
         { // Sell
-          double max2 = MathMax(Low[2],High[2]);
+          // double max2 = MathMax(Low[2],High[2]);
           double max1 = MathMax(Low[1],High[1]);
           double max0 = MathMax(Low[0],High[0]);
           double max = MathMax(max1,max0);
-          max = MathMax(max,max2);
+          // max = MathMax(max,max2);
 
           Stop=(max-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
