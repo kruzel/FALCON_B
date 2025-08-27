@@ -61,7 +61,7 @@ extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
 extern double  MinStopLossATRMultiplier         = 0.3; // Min Stop Loss ATR multiplier
-extern double  MaxStopLossATRMultiplier         = 1; // Max Stop Loss ATR Multiplier
+extern double  MaxStopLossATRMultiplier         = 2; // Max Stop Loss ATR Multiplier
 extern double  StopBarMargin                    = 10; // stop loss margin (% bar size)
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
@@ -72,6 +72,7 @@ extern bool    UseFixedTakeProfit               = False; // Fixed size take prof
 extern double  FixedTakeProfit                  = 0; // Hard Take Profit in Pips. Will be overridden if vol-based TP is true 
 extern bool    IsVolatilityTakeProfitOn         = False;
 extern double  VolBasedTPMultiplier             = 6; // Take Profit Amount in units of Volatility
+extern double  TakeProfitMarginATRMultiplier    = 0.3; // Take Profit margin ATR Multiplier
 
 extern string  Header5="----------Hidden TP & SL Settings-----------";
 extern bool    UseHiddenStopLoss                = False;
@@ -540,6 +541,7 @@ int start()
    OrderNumber=0; // OrderNumber used in Entry Rules
    double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); //points
    bool IsAfterExit = false;
+   bool IsPinBar = false;
 
    myATR=iATR(NULL,Period(),atr_period,1);
 
@@ -591,7 +593,7 @@ int start()
    
    //----------Entry & Exit rules -----------
 
-   if(CountPosOrders(MagicNumber,-1) == 0 && !lastOrderClosedByStopLoss)
+   if(CountPosOrders(MagicNumber,-1) == 0)
     {
       // check continuation after retracement
       if(paState.prevTrendState == UP_TREND_RETRACEMENT && paState.trendState == UP_TREND && BreakoutState!=BO_WAITING)
@@ -654,14 +656,16 @@ int start()
       }
    } 
 
-    if(CountPosOrders(MagicNumber,OP_BUY)>=1 && (IsBearishPinBar(1)))
+    if(IsBearishPinBar(1))
     {
         Trigger = 2; // Sell signal
+        IsPinBar = true;
         if(OnJournaling) Print("Exit Signal - SELL on reversal to DOWN_TREND due to bearish pin bar");
     }
-    else if(CountPosOrders(MagicNumber,OP_SELL)>=1 && (IsBullishPinBar(1)))
+    else if(IsBullishPinBar(1))
     {
         Trigger = 1; // Buy signal
+        IsPinBar = true;
         if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND due to bullish pin bar");
     }
       
@@ -829,7 +833,10 @@ int start()
     {
       if(Trigger==1) // Buy
         {
-          Stop=(Ask - MathMin(Low[1],High[1]))/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+          double min1 = MathMin(Low[1],High[1]);
+          double min0 = MathMin(Low[0],High[0]);
+          double min = MathMin(min1,min0);
+          Stop=(Ask - min)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
           // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
@@ -839,7 +846,7 @@ int start()
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               Print("Stop too small, using ATR for Stop Loss: ", Stop);
             } 
-            else if(Stop>MaxStopLossATRMultiplier*myATR) // If the stop is too large, use ATR
+            else if(Stop>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               Print("Stop is too large, using ATR for Stop Loss: ", Stop);
@@ -848,7 +855,10 @@ int start()
         } 
         else if(Trigger==2) 
         { // Sell
-          Stop=(MathMax(Low[1],High[1])-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+          double max1 = MathMax(Low[1],High[1]);
+          double max0 = MathMax(Low[0],High[0]);
+          double max = MathMax(max1,max0);
+          Stop=(max-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
           // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
@@ -858,7 +868,7 @@ int start()
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", Stop);
             }
-            else if(Stop>MaxStopLossATRMultiplier*myATR) // If the stop is too large, use ATR
+            else if(Stop>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
               if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", Stop);
@@ -897,10 +907,10 @@ int start()
       if(Trigger==1)
       {
         // Print("Take Profit is close to supply zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_hi_zone_P2: ", ner_hi_zone_P2, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
-        if(Take > (MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point)/(PipFactor*Point)) //P2 is the lower bound of the supply zone
+        if(Take > (MathAbs(Close[0] - ner_hi_zone_P2) - TakeProfitMarginATRMultiplier * Point)/(PipFactor*Point)) //P2 is the lower bound of the supply zone
         {
-          Take = (MathAbs(Close[0] - ner_hi_zone_P2) - supplyDemandMarginPoints * Point)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
-          if(Take < supplyDemandMarginPoints / PipFactor) // Ensure Take is not too small
+          Take = (MathAbs(Close[0] - ner_hi_zone_P2) - TakeProfitMarginATRMultiplier * Point)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
+          if(Take < TakeProfitMarginATRMultiplier / PipFactor) // Ensure Take is not too small
           {
             if(OnJournaling) Print("Take Profit is too close to supply zone, canceling signal");
             Trigger = 0; //Cancel signal
@@ -908,12 +918,12 @@ int start()
         }
         
       }
-      else if(Trigger==2 && Take > (MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point)/(PipFactor*Point)) // P1 is the upper bound of the demand zone
+      else if(Trigger==2 && Take > (MathAbs(Close[0] - ner_lo_zone_P1) - TakeProfitMarginATRMultiplier * Point)/(PipFactor*Point)) // P1 is the upper bound of the demand zone
       {
 
         // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_lo_zone_P1: ", ner_lo_zone_P1, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
-        Take = (MathAbs(Close[0] - ner_lo_zone_P1) - supplyDemandMarginPoints * Point)/(PipFactor*Point); // Adjust Take Profit to be below the demand zone
-        if(Take < supplyDemandMarginPoints / PipFactor) // Ensure Take is not too small
+        Take = (MathAbs(Close[0] - ner_lo_zone_P1) - TakeProfitMarginATRMultiplier * Point)/(PipFactor*Point); // Adjust Take Profit to be below the demand zone
+        if(Take < TakeProfitMarginATRMultiplier / PipFactor) // Ensure Take is not too small
         {
           if(OnJournaling) Print("Take Profit is too close to demand zone, canceling signal");
           Trigger = 0; //Cancel signal
@@ -924,12 +934,12 @@ int start()
 //----------Exit Rules (All Opened Positions)-----------
    // TDL 2: Setting up Exit rules. Modify the ExitSignal() function to suit your needs.
 
-   if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(Trigger)==2)
+   if(CountPosOrders(MagicNumber,OP_BUY)>=1 && ExitSignal(Trigger)==2 && IsPinBar)
      { // Close Long Positions
       CloseOrderPosition(OP_BUY, OnJournaling, MagicNumber, Slippage, PipFactor, RetryInterval); 
       IsAfterExit = true; // Set flag to indicate exit
      }
-   if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ExitSignal(Trigger)==1)
+   if(CountPosOrders(MagicNumber,OP_SELL)>=1 && ExitSignal(Trigger)==1 && IsPinBar)
      { // Close Short Positions
       CloseOrderPosition(OP_SELL, OnJournaling, MagicNumber, Slippage, PipFactor, RetryInterval);
       IsAfterExit = true; // Set flag to indicate exit
@@ -1015,6 +1025,7 @@ int start()
     }
 
 // ---------- positions processing ----------
+  // TODO: if IsPinBar then open limit order above / below pinbar high / low
 
    if(TradeAllowed && EntrySignal(Trigger)==1)
     { // Open Long Positions
