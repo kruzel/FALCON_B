@@ -60,9 +60,9 @@ extern double  BreakoutMarginATRMultiplier      = 0.2; // Breakout Distance (ATR
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
-extern double  MinStopLossATRMultiplier         = 0.3; // Min Stop Loss ATR multiplier
+extern double  MinStopLossATRMultiplier         = 0.5; // Min Stop Loss ATR multiplier
 extern double  MaxStopLossATRMultiplier         = 2; // Max Stop Loss ATR Multiplier
-extern double  StopBarMargin                    = 10; // stop loss margin (% bar size)
+extern double  StopBarMargin                    = 0; // stop loss margin (% bar size)
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
 extern bool    IsVolatilityStopOn               = False;
@@ -72,7 +72,7 @@ extern bool    UseFixedTakeProfit               = False; // Fixed size take prof
 extern double  FixedTakeProfit                  = 0; // Hard Take Profit in Pips. Will be overridden if vol-based TP is true 
 extern bool    IsVolatilityTakeProfitOn         = False;
 extern double  VolBasedTPMultiplier             = 6; // Take Profit Amount in units of Volatility
-extern double  TakeProfitMarginATRMultiplier    = 0.3; // Take Profit margin ATR Multiplier
+extern double  TakeProfitMarginATRMultiplier    = 0.2; // Take Profit margin ATR Multiplier
 
 extern string  Header5="----------Hidden TP & SL Settings-----------";
 extern bool    UseHiddenStopLoss                = False;
@@ -202,6 +202,7 @@ int Trigger;
 int SRTriggered;
 bool IsMeanReversal = false; // Flag for mean reversal condition
 bool lastOrderClosedByStopLoss = false;
+bool IsPinBar = false;
 
 enum BreakoutStates
 {
@@ -431,6 +432,15 @@ int start()
       SaveChart();
     }
 
+    static int lastOpenOrder = 0;
+    int newOpenOrder = GetLastOpenOrder(MagicNumber);
+    if(lastOpenOrder != newOpenOrder)
+    {
+      lastOpenOrder = newOpenOrder;
+      // UpdateStopLossTakeProfitAll(OnJournaling,RetryInterval,MagicNumber,PipFactor);
+      SaveChart();
+    }
+
     // If there are no open positions and we found a losing trade in history
     if(!lastOrderClosedByStopLoss)
     {
@@ -541,7 +551,7 @@ int start()
    OrderNumber=0; // OrderNumber used in Entry Rules
    double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); //points
    bool IsAfterExit = false;
-   bool IsPinBar = false;
+   IsPinBar = false;
 
    myATR=iATR(NULL,Period(),atr_period,1);
 
@@ -821,121 +831,9 @@ int start()
    }
 
 //----------Stop loss and Take Profit calculation for new trades -----------
-   
-    if(UseFixedStopLoss==True) 
-    {
-      if(Trigger==1) // Buy
-        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
-      else if(Trigger==2) // Sell
-        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
-    }  
-    else if(SlTpbyLastBar==True) 
-    {
-      if(Trigger==1) // Buy
-        {
-          // double min2 = MathMin(Low[2],High[2]);
-          double min1 = MathMin(Low[1],High[1]);
-          double min0 = MathMin(Low[0],High[0]);
-          double min = MathMin(min1,min0);
-          // min = MathMin(min, min2);
-          
-          Stop=(Ask - min)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
-          // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
-          // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
-          {
-            if(Stop<MinStopLossATRMultiplier*myATR) 
-            {
-              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              Print("Stop too small, using ATR for Stop Loss: ", Stop);
-            } 
-            else if(Stop>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
-            {
-              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              Print("Stop is too large, using ATR for Stop Loss: ", Stop);
-            }
-          }
-        } 
-        else if(Trigger==2) 
-        { // Sell
-          // double max2 = MathMax(Low[2],High[2]);
-          double max1 = MathMax(Low[1],High[1]);
-          double max0 = MathMax(Low[0],High[0]);
-          double max = MathMax(max1,max0);
-          // max = MathMax(max,max2);
 
-          Stop=(max-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
-          // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
-          // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
-          {
-            if(Stop<MinStopLossATRMultiplier*myATR) 
-            {
-              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", Stop);
-            }
-            else if(Stop>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
-            {
-              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", Stop);
-            }
-          }
-        }
-    } else
-    {
-      Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-    }
-
-    if(UseFixedTakeProfit==True) 
-    {
-      if(Trigger==1) // Buy
-        Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
-      else if(Trigger==2) // Sell
-        Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
-    }  
-    else if(SlTpbyLastBar==True) 
-    {
-       Take=Stop*TpSlRatio;
-    }
-    else 
-    {
-      Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,PipFactor);
-    }
-
-    if(lastOrderClosedByStopLoss)
-    {
-      Take = 0.5 * Take;
-    }
-
-    // check if Take is close to supply or demand zone, not in breakout
-    if((UseSupplyDemandPoints || UseSupplyDemandATR) && Trigger > 0 && BreakoutState!=BO_TRIGGERED)
-    {
-      if(Trigger==1)
-      {
-        // Print("Take Profit is close to supply zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_hi_zone_P2: ", ner_hi_zone_P2, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
-        if(Take > (MathAbs(Close[0] - ner_hi_zone_P2) - TakeProfitMarginATRMultiplier * Point)/(PipFactor*Point)) //P2 is the lower bound of the supply zone
-        {
-          Take = (MathAbs(Close[0] - ner_hi_zone_P2) - TakeProfitMarginATRMultiplier * Point)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
-          if(Take < TakeProfitMarginATRMultiplier / PipFactor) // Ensure Take is not too small
-          {
-            if(OnJournaling) Print("Take Profit is too close to supply zone, canceling signal");
-            Trigger = 0; //Cancel signal
-          }
-        }
-        
-      }
-      else if(Trigger==2 && Take > (MathAbs(Close[0] - ner_lo_zone_P1) - TakeProfitMarginATRMultiplier * Point)/(PipFactor*Point)) // P1 is the upper bound of the demand zone
-      {
-
-        // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_lo_zone_P1: ", ner_lo_zone_P1, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
-        Take = (MathAbs(Close[0] - ner_lo_zone_P1) - TakeProfitMarginATRMultiplier * Point)/(PipFactor*Point); // Adjust Take Profit to be below the demand zone
-        if(Take < TakeProfitMarginATRMultiplier / PipFactor) // Ensure Take is not too small
-        {
-          if(OnJournaling) Print("Take Profit is too close to demand zone, canceling signal");
-          Trigger = 0; //Cancel signal
-        }
-      }
-    }
+    Stop = CalculateStopLoss(PipFactor);
+    Take = CalculateTakeProfit();
 
 //----------Exit Rules (All Opened Positions)-----------
    // TDL 2: Setting up Exit rules. Modify the ExitSignal() function to suit your needs.
@@ -2329,6 +2227,47 @@ void TrailingStopAll(bool Journaling,double TrailingStopDist,double TrailingStop
 //| End Trailing Stop
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
+//| Update Stop and take profit levels for all positions
+//+------------------------------------------------------------------+
+
+void UpdateStopLossTakeProfitAll(bool Journaling,int Retry_Interval,int Magic,int K)
+  {
+// Type: Fixed Template 
+// Do not edit unless you know what you're doing 
+
+// This function sets trailing stops for all positions
+
+   for(int i=OrdersTotal()-1; i>=0; i--) // Looping through all orders
+     {
+      bool Modify=false;
+      if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic)
+        {
+         RefreshRates();
+         Stop = CalculateStopLoss(K);
+         Take = CalculateTakeProfit();
+          if(OrderType()==OP_BUY && (Bid-OrderStopLoss()!=Stop*K*Point || OrderStopLoss()==0))
+            {
+              if(Journaling)Print("Trying to modify order "+(string)OrderTicket()+" ...");
+              HandleTradingEnvironment(Journaling,Retry_Interval);
+              Modify=OrderModify(OrderTicket(),OrderOpenPrice(),Bid-Stop*K*Point,Bid+Take*K*Point,0,CLR_NONE);
+              if(Journaling && !Modify)Print("Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
+              if(Journaling && Modify)Print("Order successfully modified, stop loss and take profit changed.");
+            }
+         if(OrderType()==OP_SELL && ((OrderStopLoss()-Ask!=Stop*K*Point) || (OrderStopLoss()==0)))
+           {
+            if(Journaling)Print("Trying to modify order "+(string)OrderTicket()+" ...");
+            HandleTradingEnvironment(Journaling,Retry_Interval);
+            Modify=OrderModify(OrderTicket(),OrderOpenPrice(),Ask+Stop*K*Point,Ask-Take*K*Point,0,CLR_NONE);
+            if(Journaling && !Modify)Print("Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
+            if(Journaling && Modify)Print("Order successfully modified, stop loss and take profit changed.");
+           }
+        }
+     }
+  }
+//+------------------------------------------------------------------+
+//| End Update Stop and take profit levels for all positions
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //| Update Hidden Trailing Stops List                                     
 //+------------------------------------------------------------------+
 
@@ -2816,8 +2755,131 @@ void TriggerAndReviewHiddenVolTrailing(bool Journaling, double VolTrailingDistMu
 //+------------------------------------------------------------------+
 //| End of Trigger and Review Hidden Volatility Trailing Stop
 //+------------------------------------------------------------------+
+//| CalculateStopLoss                                                |
 //+------------------------------------------------------------------+
-//| HANDLE TRADING ENVIRONMENT                                       
+double CalculateStopLoss(int K)
+  {
+   if(UseFixedStopLoss==True) 
+    {
+      if(Trigger==1) // Buy
+        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
+      else if(Trigger==2) // Sell
+        Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
+    }  
+    else if(SlTpbyLastBar==True) 
+    {
+      if(Trigger==1) // Buy
+        {
+          double min = MathMin(Low[1],Low[0]);
+          
+          Stop=(Ask - min)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+          // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
+          // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
+          // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
+          {
+            if(Stop*(PipFactor*Point)<MinStopLossATRMultiplier*myATR) 
+            {
+              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+              Print("Stop too small, using ATR for Stop Loss: ", Stop);
+            } 
+            else if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
+            {
+              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+              Print("Stop is too large, using ATR for Stop Loss: ", Stop);
+            }
+          }
+        } 
+        else if(Trigger==2) 
+        { // Sell
+          double max = MathMax(High[0],High[1]);
+
+          Stop=(max-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+          // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
+          // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
+          // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
+          {
+            if(Stop*(PipFactor*Point)<MinStopLossATRMultiplier*myATR) 
+            {
+              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+              if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", Stop);
+            }
+            else if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
+            {
+              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+              if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", Stop);
+            }
+          }
+        }
+    } else
+    {
+      Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+    }
+
+   return(Stop);
+  }
+
+//+------------------------------------------------------------------+
+//| CalculateStopLoss                                      
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| CalculateTakeProfit                                                                                     
+//+------------------------------------------------------------------+
+double CalculateTakeProfit()
+  {
+   if(UseFixedTakeProfit==True) 
+    {
+      if(Trigger==1) // Buy
+        Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
+      else if(Trigger==2) // Sell
+        Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
+    }  
+    else if(SlTpbyLastBar==True) 
+    {
+       Take=Stop*TpSlRatio;
+    }
+    else 
+    {
+      Take=VolBasedTakeProfit(IsVolatilityTakeProfitOn,FixedTakeProfit,myATR,VolBasedTPMultiplier,PipFactor);
+    }
+
+    if(lastOrderClosedByStopLoss)
+    {
+      Take = 0.5 * Take;
+    }
+
+    // check if Take is close to supply or demand zone, not in breakout
+    if((UseSupplyDemandPoints || UseSupplyDemandATR) && Trigger > 0)
+    {
+      if(Trigger==1)
+      {
+        if(Close[0] + Take*(PipFactor*Point) + TakeProfitMarginATRMultiplier * myATR > prev_ner_hi_zone_P2) //P2 is the lower bound of the supply zone
+        {
+          // Print("Take Profit is close to supply zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_hi_zone_P2: ", prev_ner_hi_zone_P2, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
+          Take = (prev_ner_hi_zone_P2 - Close[0] - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
+          if(Take < 0)
+          {
+            if(OnJournaling) Print("Take Profit is too close or above to supply zone, canceling signal");
+            Trigger = 0; //Cancel signal
+          }
+        }
+        
+      } 
+      else if(Close[0] - Take*(PipFactor*Point) - TakeProfitMarginATRMultiplier * myATR < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
+      {
+        // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_lo_zone_P1: ", prev_ner_lo_zone_P1, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
+        Take = (Close[0] - prev_ner_lo_zone_P1 - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the demand zone
+        if(Take < 0) // Ensure Take is not too small
+        {
+          if(OnJournaling) Print("Take Profit is too close or below to demand zone, canceling signal");
+          Trigger = 0; //Cancel signal
+        }
+      }
+    }
+
+   return(Take);
+  }
+//+------------------------------------------------------------------+
+//| CalculateTakeProfit                                                                                     
 //+------------------------------------------------------------------+
 void HandleTradingEnvironment(bool Journaling,int Retry_Interval)
   {
