@@ -833,9 +833,12 @@ int start()
     {
       if(Trigger==1) // Buy
         {
+          double min2 = MathMin(Low[2],High[2]);
           double min1 = MathMin(Low[1],High[1]);
           double min0 = MathMin(Low[0],High[0]);
           double min = MathMin(min1,min0);
+          min = MathMin(min, min2);
+          
           Stop=(Ask - min)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
@@ -855,9 +858,12 @@ int start()
         } 
         else if(Trigger==2) 
         { // Sell
+          double max2 = MathMax(Low[2],High[2]);
           double max1 = MathMax(Low[1],High[1]);
           double max0 = MathMax(Low[0],High[0]);
           double max = MathMax(max1,max0);
+          max = MathMax(max,max2);
+
           Stop=(max-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
