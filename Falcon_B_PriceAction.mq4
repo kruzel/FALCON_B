@@ -2774,7 +2774,9 @@ double CalculateStopLoss(int K)
       if(Trigger==1) // Buy
         {
           double min = MathMin(Low[1],Low[0]);
-          
+          if(MathAbs(Close[1] - Open[1]) < MinBarSize * Point)
+            min = MathMin(Low[2],Low[0]);
+
           Stop=(Ask - min)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
@@ -2795,6 +2797,8 @@ double CalculateStopLoss(int K)
         else if(Trigger==2) 
         { // Sell
           double max = MathMax(High[0],High[1]);
+          if(MathAbs(Close[1] - Open[1]) < MinBarSize * Point)
+            max = MathMax(High[2],High[0]);
 
           Stop=(max-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
