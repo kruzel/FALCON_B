@@ -63,9 +63,9 @@ extern double  BreakoutMarginATRMultiplier      = 0.2; // Breakout Distance (ATR
 extern string  Header4="----------TP & SL Settings-----------";
 extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
 extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
-extern double  MinStopLossATRMultiplier         = 0.5; // Min Stop Loss ATR multiplier
+extern double  MinStopLossATRMultiplier         = 1.2; // Min Stop Loss ATR multiplier
 extern double  MaxStopLossATRMultiplier         = 2; // Max Stop Loss ATR Multiplier
-extern double  StopBarMargin                    = 0; // stop loss margin (% bar size)
+extern double  StopBarMargin                    = 10; // stop loss margin (% bar size)
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
 extern bool    IsVolatilityStopOn               = False;
@@ -2773,11 +2773,17 @@ double CalculateStopLoss(int K)
     {
       if(Trigger==1) // Buy
         {
-          double min = MathMin(Low[1],Low[0]);
-          if(MathAbs(Close[1] - Open[1]) < MinBarSize * Point)
-            min = MathMin(Low[2],Low[0]);
-
-          Stop=(Ask - min)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+          double min = Low[0];
+          for(int iBarIndex = 0; iBarIndex < 10; iBarIndex++)
+          {
+            min = MathMin(Low[iBarIndex],Low[iBarIndex+1]);
+            if(Ask - min > MinStopLossATRMultiplier * myATR)
+            {
+              Stop=(Ask - min)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+              break;
+            }
+          }
+          
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
           // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
@@ -2795,12 +2801,18 @@ double CalculateStopLoss(int K)
           }
         } 
         else if(Trigger==2) 
-        { // Sell
-          double max = MathMax(High[0],High[1]);
-          if(MathAbs(Close[1] - Open[1]) < MinBarSize * Point)
-            max = MathMax(High[2],High[0]);
+        { 
+          double max = High[0];
+          for(int iBarIndex = 0; iBarIndex < 10; iBarIndex++)
+          {
+            max = MathMax(High[iBarIndex],High[iBarIndex+1]);
+            if(max - Bid > MinStopLossATRMultiplier * myATR)
+            {
+              Stop=(max - Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+              break;
+            }
+          }
 
-          Stop=(max-Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
           // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
           // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
           // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
