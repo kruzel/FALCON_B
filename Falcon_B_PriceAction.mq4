@@ -35,10 +35,13 @@ extern double  Lots                             = 0.01;
 extern bool    IsSizingOn                       = True; // Risk based sizing, ignore fixed lots
 extern double  Risk                             = 1; // Risk per trade (%)
 extern int     MaxPositionsAllowed              = 1;
-extern double  MaxSpread                        = 50; // Maximum spread (Pips)
+extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
+
+extern string  Header24="----------Trading Limits Settings-----------";
+extern double  MaxSpread                        = 50; // Maximum spread (Points)
 extern bool    UseMaxSpreadATR                  = True;
 extern double  MaxSpreadATRMultiplier           = 3.0; // Maximum spread (ATR Multiplier)
-extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, for Yen set to 100
+extern double  MinBarSize                       = 50; // Minimum bar size (Points)
 
 extern string  Header23="----------Arears Management Settings-----------";
 extern bool    IsArearsManagementEnabled          = True; // Enable Arears Money Management
@@ -66,7 +69,7 @@ extern double  StopBarMargin                    = 0; // stop loss margin (% bar 
 extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
 extern bool    IsVolatilityStopOn               = False;
-extern double  VolBasedSLMultiplier             = 1; // Stop Loss Amount in units of Volatility
+extern double  VolBasedSLMultiplier             = 2; // Stop Loss Amount in units of Volatility
 
 extern bool    UseFixedTakeProfit               = False; // Fixed size take profit
 extern double  FixedTakeProfit                  = 0; // Hard Take Profit in Pips. Will be overridden if vol-based TP is true 
@@ -555,6 +558,10 @@ int start()
 
    myATR=iATR(NULL,Period(),atr_period,1);
 
+   
+   if(UseBreakoutATR)
+      BreakoutMarginPoints = BreakoutMarginATRMultiplier * myATR / Point;
+
    PaResults paState = PriceActionStates.ProcessBars(1);
    if(UseSupportResistance)
     SupportResistance.SRUpdate(0); // Update for current bar
@@ -595,12 +602,22 @@ int start()
       }
     }
 
+    if(UseMaxSpreadATR)
+        MaxSpread = myATR / Point / MaxSpreadATRMultiplier;
 
-   if(UseBreakoutATR)
-      BreakoutMarginPoints = BreakoutMarginATRMultiplier * myATR / Point;
+    if( currentSpread  > MaxSpread )
+    {
+      if(OnJournaling) Print("Current spread is too high: ", currentSpread, " points. Max allowed: ", MaxSpread, " points");
+      return (0); // Exit if spread is too high
+    }
 
-  //  Print("Current spread= ", currentSpread, " points. Max allowed: ", MaxSpread, " pips", " PipFactor=", PipFactor, " Point=", " ATR: ", myATR);
-   
+    if(MathAbs(Close[1] - Open[1]) < MinBarSize * Point)
+    {
+      if(OnJournaling) Print("Previous bar size is too small: ", MathAbs(Close[1] - Open[1])/Point, " points. Min required: ", MinBarSize, " points");
+      return (0); // Exit if previous bar size is too small
+    }
+
+ 
    //----------Entry & Exit rules -----------
 
    if(CountPosOrders(MagicNumber,-1) == 0)
@@ -911,20 +928,6 @@ int start()
           if(OnJournaling) Print("BUY signal canceled - only sell allowed below pipFinite line");
           return (0); // Exit if no valid signal
         }
-      }
-
-      if(UseMaxSpreadATR)
-      {
-        if (currentSpread  > myATR / Point / MaxSpreadATRMultiplier)
-        {
-          if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. ATR: ", myATR / (PipFactor*Point), " pips");
-          return (0); // Exit if spread is too high
-        }
-      }
-      else if( currentSpread  > MaxSpread * PipFactor )
-      {
-        if(OnJournaling) Print("Current spread is too high: ", currentSpread / PipFactor, " pips. Max allowed: ", MaxSpread, " pips");
-        return (0); // Exit if spread is too high
       }
     }
 
@@ -2852,10 +2855,10 @@ double CalculateTakeProfit()
     {
       if(Trigger==1)
       {
-        if(Close[0] + Take*(PipFactor*Point) + TakeProfitMarginATRMultiplier * myATR > prev_ner_hi_zone_P2) //P2 is the lower bound of the supply zone
+        if(Ask + Take*(PipFactor*Point) + TakeProfitMarginATRMultiplier * myATR > prev_ner_hi_zone_P2) //P2 is the lower bound of the supply zone
         {
           // Print("Take Profit is close to supply zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_hi_zone_P2: ", prev_ner_hi_zone_P2, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
-          Take = (prev_ner_hi_zone_P2 - Close[0] - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
+          Take = (prev_ner_hi_zone_P2 - Ask - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
           if(Take < 0)
           {
             if(OnJournaling) Print("Take Profit is too close or above to supply zone, canceling signal");
@@ -2864,10 +2867,10 @@ double CalculateTakeProfit()
         }
         
       } 
-      else if(Close[0] - Take*(PipFactor*Point) - TakeProfitMarginATRMultiplier * myATR < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
+      else if(Bid - Take*(PipFactor*Point) - TakeProfitMarginATRMultiplier * myATR < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
       {
         // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_lo_zone_P1: ", prev_ner_lo_zone_P1, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
-        Take = (Close[0] - prev_ner_lo_zone_P1 - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the demand zone
+        Take = (Bid - prev_ner_lo_zone_P1 - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the demand zone
         if(Take < 0) // Ensure Take is not too small
         {
           if(OnJournaling) Print("Take Profit is too close or below to demand zone, canceling signal");
