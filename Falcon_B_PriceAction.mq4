@@ -20,6 +20,9 @@ Falcon B:
 //+------------------------------------------------------------------+
 //| Setup                                               
 //+------------------------------------------------------------------+
+extern string  Version                           ="1.0";                   
+extern bool    IsTestMode                       = False; // Enable test mode
+
 extern string  Header1="----------EA General Settings-----------";
 extern int     MagicNumber                      = 8118201;
 extern int     TerminalType                     = 1;         //0 mean slave, 1 mean master
@@ -28,7 +31,6 @@ extern int     Slippage                         = 2; // Slippage in Pips
 extern bool    IsECNbroker                      = False; // Is your broker an ECN
 extern bool    OnJournaling                     = True; // Add EA updates in the Journal Tab
 extern bool    OnChartShots                     = False; // Add EA updates in the Chart Shots
-extern bool    IsTestMode                       = False; // Enable test mode
 
 extern string  Header3="----------Position Sizing Settings-----------";
 extern double  Lots                             = 0.01; 
@@ -683,6 +685,8 @@ int start()
       }
    } 
 
+   if(!lastOrderClosedByStopLoss)
+   {
     if(IsBearishPinBar(1))
     {
         Trigger = 2; // Sell signal
@@ -695,7 +699,8 @@ int start()
         IsPinBar = true;
         if(OnJournaling) Print("Exit Signal - BUY on reversal to UP_TREND due to bullish pin bar");
     }
-      
+  }
+
    // support resistance exit rules
    if(UseSupportResistance && !lastOrderClosedByStopLoss)
    {
