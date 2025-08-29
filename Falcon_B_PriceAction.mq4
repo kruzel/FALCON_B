@@ -31,6 +31,7 @@ extern int     Slippage                         = 2; // Slippage in Pips
 extern bool    IsECNbroker                      = False; // Is your broker an ECN
 extern bool    OnJournaling                     = True; // Add EA updates in the Journal Tab
 extern bool    OnChartShots                     = False; // Add EA updates in the Chart Shots
+extern bool    ShowLotSizeOnChart               = True; // Display lot size near entry points
 
 extern string  Header3="----------Position Sizing Settings-----------";
 extern double  Lots                             = 0.01; 
@@ -412,6 +413,17 @@ int deinit()
     }
 
     str = "result_";
+    // Loop backwards to avoid skipping objects when deleting
+    for(int i = total - 1; i >= 0; i--)
+    {
+        string name = ObjectName(i);
+        if(StringFind(name, str) != -1)
+        {
+            ObjectDelete(name);
+        }
+    }
+
+    str = "lotsize_";
     // Loop backwards to avoid skipping objects when deleting
     for(int i = total - 1; i >= 0; i--)
     {
@@ -1049,7 +1061,14 @@ int start()
 
    if(TradeAllowed && EntrySignal(Trigger)==1)
     { // Open Long Positions
-      OrderNumber=OpenPositionMarket(OP_BUY,GetLot(IsSizingOn,Lots,UpdatedRisk,Stop, PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+      double lotSize = GetLot(IsSizingOn,Lots,UpdatedRisk,Stop, PipFactor,LotAdjustFactor);
+      OrderNumber=OpenPositionMarket(OP_BUY,lotSize,Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+
+      // Display lot size on chart if order was successful
+      if(OrderNumber > 0 && OrderSelect(OrderNumber, SELECT_BY_TICKET) && ShowLotSizeOnChart)
+      {
+         DisplayLotSizeOnChart(OrderOpenTime(), OrderOpenPrice(), lotSize, OP_BUY);
+      }
 
       // Set Stop Loss value for Hidden SL
       if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
@@ -1075,7 +1094,14 @@ int start()
 
    if(TradeAllowed && EntrySignal(Trigger)==2)
     { // Open Short Positions
-      OrderNumber=OpenPositionMarket(OP_SELL,GetLot(IsSizingOn,Lots,UpdatedRisk,Stop,PipFactor,LotAdjustFactor),Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+      double lotSize = GetLot(IsSizingOn,Lots,UpdatedRisk,Stop,PipFactor,LotAdjustFactor);
+      OrderNumber=OpenPositionMarket(OP_SELL,lotSize,Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
+
+      // Display lot size on chart if order was successful
+      if(OrderNumber > 0 && OrderSelect(OrderNumber, SELECT_BY_TICKET) && ShowLotSizeOnChart)
+      {
+         DisplayLotSizeOnChart(OrderOpenTime(), OrderOpenPrice(), lotSize, OP_SELL);
+      }
 
       // Set Stop Loss value for Hidden SL
       if(UseHiddenStopLoss) SetStopLossHidden(OnJournaling,IsVolatilityStopLossOn_Hidden,FixedStopLoss_Hidden,myATR,VolBasedSLMultiplier_Hidden,PipFactor,OrderNumber);
@@ -3248,6 +3274,53 @@ void VisualizeResultOverlay(datetime now, int winloss, double price)
       if(PAverbose) Print("Failed to create text object: ", name);
    }
    
+}
+
+//+------------------------------------------------------------------+
+//| Display Lot Size Near Entry Point                               |
+//+------------------------------------------------------------------+
+void DisplayLotSizeOnChart(datetime entryTime, double entryPrice, double lotSize, int orderType)
+{
+   static int lotDisplayCounter = 0;
+   
+   // Create unique name for the text object
+   string name = "lotsize_" + IntegerToString(lotDisplayCounter++) + "_time_" + TimeToString(entryTime, TIME_MINUTES);
+   
+   // Format lot size text
+   string lotText = DoubleToString(lotSize, 2);
+   
+   // Set color based on order type
+   color textColor = (orderType == OP_BUY) ? clrGreen : clrRed;
+   
+   // Calculate text position slightly offset from entry price
+   double textPrice = entryPrice;
+   if(orderType == OP_BUY)
+   {
+      textPrice = entryPrice + (Point); // Above entry for buy orders
+   }
+   else
+   {
+      textPrice = entryPrice - (Point); // Below entry for sell orders
+   }
+   
+   // Delete any existing object with the same name
+   ObjectDelete(name);
+   
+   // Create text object
+  if(ObjectCreate(name, OBJ_TEXT, 0, entryTime, textPrice))
+  {
+    ObjectSetText(name, lotText, 10, "Arial", textColor);
+    ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_LEFT);
+    ObjectSet(name, OBJPROP_STYLE, STYLE_SOLID);
+    ObjectSet(name, OBJPROP_COLOR, textColor);
+    ObjectSet(name, OBJPROP_BACK, false); // Draw in foreground
+      
+    if(OnJournaling) Print("Lot size display created: ", name, " Size: ", lotText, " at ", TimeToString(entryTime));
+   }
+   else
+   {
+      if(OnJournaling) Print("Failed to create lot size display: ", name);
+   }
 }
 
 //+------------------------------------------------------------------+
