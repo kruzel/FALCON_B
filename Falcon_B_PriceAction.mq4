@@ -446,99 +446,6 @@ int deinit()
 //| End of Expert Deinitialization                          
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
-//| Calculate Arears Money Management Risk Size                      |
-//+------------------------------------------------------------------+
-double CalculateArearsRisk(int consecutiveLosses, double totalLossAmount)
-{
-    double adjustedRisk = Risk;
-    
-    if(!IsArearsManagementEnabled || consecutiveLosses <= 0)
-        return adjustedRisk;
-    
-    if(UseProgressiveArears)
-    {
-        // Progressive calculation to recover losses plus target profit
-        double accountBalance = AccountBalance();
-        double lossPercentage = MathAbs(totalLossAmount) / accountBalance * 100;
-        
-        // Calculate required risk to recover losses + target profit in next trade
-        double requiredRecovery = MathAbs(totalLossAmount) * ArearsRecoveryTarget;
-        double requiredRiskPercent = (requiredRecovery / accountBalance) * 100;
-        
-        // Apply safety cap
-        if(requiredRiskPercent > Risk * ArearsMMMaxMultiplier)
-            requiredRiskPercent = Risk * ArearsMMMaxMultiplier;
-            
-        adjustedRisk = MathMax(Risk, requiredRiskPercent);
-        
-        if(OnJournaling) 
-            Print("Progressive Arears: Losses=", consecutiveLosses, 
-                  " LossAmount=", totalLossAmount, 
-                  " RequiredRisk=", requiredRiskPercent, "% ",
-                  " AdjustedRisk=", adjustedRisk, "%");
-    }
-    else
-    {
-        // Simple incremental approach (your current method)
-        adjustedRisk = Risk + (ArearsMMSizeIncrement * consecutiveLosses);
-        
-        // Apply safety cap
-        if(adjustedRisk > Risk * ArearsMMMaxMultiplier)
-            adjustedRisk = Risk * ArearsMMMaxMultiplier;
-            
-        if(OnJournaling) 
-            Print("Simple Arears: Losses=", consecutiveLosses, 
-                  " Increment=", ArearsMMSizeIncrement * consecutiveLosses, "% ",
-                  " AdjustedRisk=", adjustedRisk, "%");
-    }
-    
-    return adjustedRisk;
-}
-
-//+------------------------------------------------------------------+
-//| Get Total Loss Amount from Consecutive Failures                  |
-//+------------------------------------------------------------------+
-double GetConsecutiveLossAmount(int Magic)
-{
-    double totalLoss = 0;
-    int consecutiveLosses = 0;
-    
-    // Get today's start time (start of current day)
-    datetime currentTime = TimeCurrent();
-    datetime todayStart = currentTime - (currentTime % 86400); // 86400 = seconds in a day
-    
-    // Check order history from most recent backwards
-    for(int i = OrdersHistoryTotal() - 1; i >= 0; i--)
-    {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
-        {
-            if(OrderSymbol() == Symbol() && 
-               OrderMagicNumber() == Magic && 
-               OrderCloseTime() >= todayStart &&
-               (OrderType() == OP_BUY || OrderType() == OP_SELL))
-            {
-                double profit = OrderProfit() + OrderSwap() + OrderCommission();
-                
-                if(profit < 0)
-                {
-                    totalLoss += profit; // Add negative profit (loss)
-                    consecutiveLosses++;
-                }
-                else
-                {
-                    break; // Stop at first profitable trade
-                }
-            }
-        }
-    }
-    
-    if(OnJournaling && totalLoss < 0)
-        Print("Consecutive losses: ", consecutiveLosses, " Total loss amount: ", totalLoss);
-    
-    return totalLoss;
-}
-
-//+------------------------------------------------------------------+
 //| Expert start                                             
 //+------------------------------------------------------------------+
 int start()
@@ -564,71 +471,84 @@ int start()
       SaveChart();
     }
 
-    // If there are no open positions and we found a losing trade in history
-    if(!lastOrderClosedByStopLoss)
+    // If there are no open positions and we didn't handle the last losing trade yet
+    if(!lastOrderClosedByStopLoss && CountPosOrders(MagicNumber,-1) == 0)
     {
       double price;
       double profit;
       int type;
+      int order;
+      datetime time;
       CloseReason closeReason;
-      datetime now = TimeCurrent();
-      if(GetBarProfitByTime(now, MagicNumber, profit, type, price, closeReason, Symbol())) // Check if there was a losing trade
+      if(GetLastProfit(MagicNumber, order, time, profit, type, price, closeReason, Symbol()))
       {
-        if(profit < 0)
+        // Compare hours and minutes of time with Time[0]
+        int timeHour = TimeHour(time);
+        int timeMinute = TimeMinute(time);
+        int currentBarHour = TimeHour(Time[0]);
+        int currentBarMinute = TimeMinute(Time[0]);
+        int prvBarHour = TimeHour(Time[1]);
+        int prvBarMinute = TimeMinute(Time[1]);
+
+        if((timeHour == currentBarHour && timeMinute == currentBarMinute) ||
+           (timeHour == prvBarHour && timeMinute == prvBarMinute))
         {
-          if(closeReason == StopLoss)
+          if(profit < 0)
           {
-            if(type==OP_BUY)
+            if(closeReason == StopLoss)
             {
-              // Last trade was a losing buy, trigger a sell
-              Trigger = 2;
-              if(OnJournaling) Print("Entry Signal - SELL after losing BUY trade");
-            }
-            else if(type==OP_SELL) 
-            {
-              // Last trade was a losing sell, trigger a buy
-              Trigger = 1;
-              if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
-            }
-            lastOrderClosedByStopLoss = true; // Store the last order profit}
+              if(type==OP_BUY)
+              {
+                // Last trade was a losing buy, trigger a sell
+                Trigger = 2;
+                if(OnJournaling) Print("Entry Signal - SELL after losing BUY trade");
+              }
+              else if(type==OP_SELL) 
+              {
+                // Last trade was a losing sell, trigger a buy
+                Trigger = 1;
+                if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
+              }
+              lastOrderClosedByStopLoss = true; // Store the last order profit}
 
-            if(IsArearsManagementEnabled)
-            {
-              int losses = GetConsecutiveFailureCount(MagicNumber);
-              double lossAmount = GetConsecutiveLossAmount(MagicNumber);
-              
-              if(losses > 0)
+              if(IsArearsManagementEnabled)
               {
-                  UpdatedRisk = CalculateArearsRisk(losses, lossAmount);
-                  if(OnJournaling) 
-                      Print("Arears Update - Losses: ", losses, 
-                            " Loss Amount: ", lossAmount, 
-                            " Updated Risk: ", UpdatedRisk, "%");
-              }
-              else
-              {
-                  // Reset risk after winning trade
-                  if(UpdatedRisk > Risk)
-                  {
-                      UpdatedRisk = Risk;
-                      if(OnJournaling) Print("Arears Reset - Risk returned to: ", UpdatedRisk, "%");
-                  }
+                int losses = GetConsecutiveFailureCount(MagicNumber);
+                double lossAmount = GetConsecutiveLossAmount(MagicNumber);
+                
+                if(losses > 0)
+                {
+                    UpdatedRisk = CalculateArearsRisk(losses, lossAmount);
+                    if(OnJournaling) 
+                        Print("Arears Update - Losses: ", losses, 
+                              " Loss Amount: ", lossAmount, 
+                              " Updated Risk: ", UpdatedRisk, "%");
+                }
+                else
+                {
+                    // Reset risk after winning trade
+                    if(UpdatedRisk > Risk)
+                    {
+                        UpdatedRisk = Risk;
+                        if(OnJournaling) Print("Arears Reset - Risk returned to: ", UpdatedRisk, "%");
+                    }
+                }
               }
             }
+
+            VisualizeResultOverlay(time, 2, price);
           }
-
-          VisualizeResultOverlay(now, 2, price);
-        }
-        else if(profit > 0)
-        {
-          // Reset risk after winning trade
-          if(UpdatedRisk > Risk)
+          else if(profit > 0)
           {
-              UpdatedRisk = Risk;
-              if(OnJournaling) Print("Arears Reset - Risk returned to: ", UpdatedRisk, "%");
-          }
+            // Reset risk after winning trade
+            if(UpdatedRisk > Risk)
+            {
+                UpdatedRisk = Risk;
+                if(OnJournaling) Print("Arears Reset - Risk returned to: ", UpdatedRisk, "%");
+            }
 
-          VisualizeResultOverlay(now, 1, price);
+            VisualizeResultOverlay(time, 1, price);
+          }
         }
       }
     }
@@ -3049,6 +2969,104 @@ double CalculateTakeProfit()
 //+------------------------------------------------------------------+
 //| CalculateTakeProfit                                                                                     
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Calculate Arears Money Management Risk Size                      |
+//+------------------------------------------------------------------+
+double CalculateArearsRisk(int consecutiveLosses, double totalLossAmount)
+{
+    double adjustedRisk = Risk;
+    
+    if(!IsArearsManagementEnabled || consecutiveLosses <= 0)
+        return adjustedRisk;
+    
+    if(UseProgressiveArears)
+    {
+        // Progressive calculation to recover losses plus target profit
+        double accountBalance = AccountBalance();
+        double lossPercentage = MathAbs(totalLossAmount) / accountBalance * 100;
+        
+        // Calculate required risk to recover losses + target profit in next trade
+        double requiredRecovery = MathAbs(totalLossAmount) * ArearsRecoveryTarget;
+        double requiredRiskPercent = (requiredRecovery / accountBalance) * 100;
+        
+        // Apply safety cap
+        if(requiredRiskPercent > Risk * ArearsMMMaxMultiplier)
+            requiredRiskPercent = Risk * ArearsMMMaxMultiplier;
+            
+        adjustedRisk = MathMax(Risk, requiredRiskPercent);
+        
+        if(OnJournaling) 
+            Print("Progressive Arears: Losses=", consecutiveLosses, 
+                  " LossAmount=", totalLossAmount, 
+                  " RequiredRisk=", requiredRiskPercent, "% ",
+                  " AdjustedRisk=", adjustedRisk, "%");
+    }
+    else
+    {
+        // Simple incremental approach (your current method)
+        adjustedRisk = Risk + (ArearsMMSizeIncrement * consecutiveLosses);
+        
+        // Apply safety cap
+        if(adjustedRisk > Risk * ArearsMMMaxMultiplier)
+            adjustedRisk = Risk * ArearsMMMaxMultiplier;
+            
+        if(OnJournaling) 
+            Print("Simple Arears: Losses=", consecutiveLosses, 
+                  " Increment=", ArearsMMSizeIncrement * consecutiveLosses, "% ",
+                  " AdjustedRisk=", adjustedRisk, "%");
+    }
+    
+    return adjustedRisk;
+}
+//+------------------------------------------------------------------+
+//| Calculate Arears Money Management Risk Size                      |
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Get Total Loss Amount from Consecutive Failures                  |
+//+------------------------------------------------------------------+
+double GetConsecutiveLossAmount(int Magic)
+{
+    double totalLoss = 0;
+    int consecutiveLosses = 0;
+    
+    // Get today's start time (start of current day)
+    datetime currentTime = TimeCurrent();
+    datetime todayStart = currentTime - (currentTime % 86400); // 86400 = seconds in a day
+    
+    // Check order history from most recent backwards
+    for(int i = OrdersHistoryTotal() - 1; i >= 0; i--)
+    {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
+        {
+            if(OrderSymbol() == Symbol() && 
+               OrderMagicNumber() == Magic && 
+               OrderCloseTime() >= todayStart &&
+               (OrderType() == OP_BUY || OrderType() == OP_SELL))
+            {
+                double profit = OrderProfit() + OrderSwap() + OrderCommission();
+                
+                if(profit < 0)
+                {
+                    totalLoss += profit; // Add negative profit (loss)
+                    consecutiveLosses++;
+                }
+                else
+                {
+                    break; // Stop at first profitable trade
+                }
+            }
+        }
+    }
+    
+    if(OnJournaling && totalLoss < 0)
+        Print("Consecutive losses: ", consecutiveLosses, " Total loss amount: ", totalLoss);
+    
+    return totalLoss;
+}
+//+------------------------------------------------------------------+
+//| Get Total Loss Amount from Consecutive Failures                  |
+//+------------------------------------------------------------------+
+
 void HandleTradingEnvironment(bool Journaling,int Retry_Interval)
   {
 // Type: Fixed Template 
