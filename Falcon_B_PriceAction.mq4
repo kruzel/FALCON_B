@@ -361,6 +361,11 @@ int init()
     }
   }
 
+  if(IsTestMode)
+    (TradeController.SetTradingEnabled(True));
+
+  TradeController.SetVersion(Version);
+
    start();
    return(0);
   }
@@ -697,29 +702,34 @@ int start()
     LossLimitPercent = TradeController.GetLossTarget();
     WinLimitPercent = TradeController.GetWinTarget();
 
-    if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
+    if(!TradeController.IsTradingEnabled())
     {
-      datetime localTime = TimeLocal();
-      int currentHour = TimeHour(localTime);
-      int currentMinute = TimeMinute(localTime);
-
-      bool isBeforeStart = (currentHour < TradingStartHour) || (currentHour == TradingStartHour && currentMinute < TradingStartMinute);
-      bool isAfterEnd = (currentHour > TradingEndHour) || (currentHour == TradingEndHour && currentMinute > TradingEndMinute);
-
-      if (TradingStartHour <= TradingEndHour) // Normal time range within the same day
+      if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
       {
-        if (isBeforeStart || isAfterEnd)
+        datetime localTime = TimeLocal();
+        int currentHour = TimeHour(localTime);
+        int currentMinute = TimeMinute(localTime);
+
+        bool isBeforeStart = (currentHour < TradingStartHour) || (currentHour == TradingStartHour && currentMinute < TradingStartMinute);
+        bool isAfterEnd = (currentHour > TradingEndHour) || (currentHour == TradingEndHour && currentMinute > TradingEndMinute);
+
+        if (TradingStartHour <= TradingEndHour) // Normal time range within the same day
         {
-          if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
-          return (0);
+          if (isBeforeStart || isAfterEnd)
+          {
+            TradeController.SetTradingEnabled(false);
+            if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
+            return (0);
+          }
         }
-      }
-      else // Time range spans midnight
-      {
-        if (!isBeforeStart && !isAfterEnd)
+        else // Time range spans midnight
         {
-          if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
-          return (0);
+          if (!isBeforeStart && !isAfterEnd)
+          {
+            TradeController.SetTradingEnabled(false);
+            if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
+            return (0);
+          }
         }
       }
     }
@@ -3287,7 +3297,7 @@ void DisplayLotSizeOnChart(datetime entryTime, double entryPrice, double lotSize
    string name = "lotsize_" + IntegerToString(lotDisplayCounter++) + "_time_" + TimeToString(entryTime, TIME_MINUTES);
    
    // Format lot size text
-   string lotText = DoubleToString(lotSize, 2);
+   string lotText = " " + DoubleToString(lotSize, 0);
    
    // Set color based on order type
    color textColor = (orderType == OP_BUY) ? clrGreen : clrRed;
@@ -3302,6 +3312,11 @@ void DisplayLotSizeOnChart(datetime entryTime, double entryPrice, double lotSize
    {
       textPrice = entryPrice - (Point); // Below entry for sell orders
    }
+
+  // Calculate lot size as percentage of balance for display
+  double balancePercent = (lotSize * MarketInfo(Symbol(), MODE_MARGINREQUIRED) / AccountBalance());
+  string percentText = " (" + DoubleToString(balancePercent, 1) + "%)";
+  lotText = lotText + percentText;
    
    // Delete any existing object with the same name
    ObjectDelete(name);
