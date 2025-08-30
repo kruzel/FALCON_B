@@ -23,7 +23,7 @@ Falcon B:
 extern string  Version                           ="1.0";                   
 
 extern string  HeaderLicense="----------License Settings-----------";
-extern string  LicenseKey                       = "";       // Enter your license key here (Format: FALCON-XXXXX-XXXXX-XXXXX-XXXX)
+extern string  LicenseKey                       = "";       // License Key (Format: FALCON-XXXXX-XXXXX-XXXXX-XXXX)
 bool    EnableTrial                      = true;     // Allow trial mode (7 days)
 
 extern string  Header21="----------Trading time settings-----------";
