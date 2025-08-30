@@ -21,7 +21,6 @@ Falcon B:
 //| Setup                                               
 //+------------------------------------------------------------------+
 extern string  Version                           ="1.0";                   
-extern bool    IsTestMode                       = False; // Enable test mode
 
 extern string  HeaderLicense="----------License Settings-----------";
 extern string  LicenseKey                       = "";       // Enter your license key here (Format: FALCON-XXXXX-XXXXX-XXXXX-XXXX)
@@ -381,7 +380,7 @@ int init()
     if(OnJournaling) Print("Updated Risk: ", UpdatedRisk, "%");
   }
 
-  if(IsTestMode && OnChartShots)
+  if(IsTesting() && OnChartShots)
   {
     // Delete all screenshot files in the ScreenShots folder
     string folderPath = "ScreenShots\\*";
@@ -415,7 +414,7 @@ int init()
     }
   }
 
-  if(IsTestMode)
+  if(IsTesting())
     (TradeController.SetTradingEnabled(True));
 
   TradeController.SetVersion(Version);
@@ -699,7 +698,7 @@ int start()
    if(UseSupportResistance)
     SupportResistance.SRUpdate(0); // Update for current bar
   
-    if(!IsTestMode && !TradeController.IsTradingEnabled())
+    if(!IsTesting() && !TradeController.IsTradingEnabled())
       {
         if(OnJournaling) Print("Trading is disabled, click the button to enable trading.");
         return (0);
