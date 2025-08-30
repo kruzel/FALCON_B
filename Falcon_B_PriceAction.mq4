@@ -61,7 +61,7 @@ extern bool    IsArearsManagementEnabled          = True; // Enable Arears Money
 extern double  ArearsMMSizeIncrement            = 0.5; // Arears Money Management increment %
 extern double  ArearsMMMaxMultiplier            = 3.0; // Maximum risk multiplier (safety cap)
 extern bool    UseProgressiveArears             = True; // Use progressive recovery calculation
-extern double  ArearsRecoveryTarget             = 1.1; // Target recovery multiplier (110% of losses)
+extern double  ArearsRecoveryTarget             = 1.5; // Target recovery multiplier (% of losses)
 
 extern string  Header13="----------Set Max Loss Win Limit settings-----------";
 extern bool    IsLossLimitActivated             = True; // Enable Max Loss Limit
@@ -3069,7 +3069,6 @@ double CalculateArearsRisk(int consecutiveLosses, double totalLossAmount)
     {
         // Progressive calculation to recover losses plus target profit
         double accountBalance = AccountBalance();
-        double lossPercentage = MathAbs(totalLossAmount) / accountBalance * 100;
         
         // Calculate required risk to recover losses + target profit in next trade
         double requiredRecovery = MathAbs(totalLossAmount) * ArearsRecoveryTarget;
