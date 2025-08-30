@@ -23,6 +23,16 @@ Falcon B:
 extern string  Version                           ="1.0";                   
 extern bool    IsTestMode                       = False; // Enable test mode
 
+extern string  HeaderLicense="----------License Settings-----------";
+extern string  LicenseKey                       = "";       // Enter your license key here (Format: FALCON-XXXXX-XXXXX-XXXXX-XXXX)
+extern bool    EnableTrial                      = true;     // Allow trial mode (30 days)
+
+extern string  Header21="----------Trading time settings-----------";
+extern int     TradingStartHour                 = 0;        // Start hour for trading (0-23)
+extern int     TradingEndHour                   = 23;       // End hour for trading (0-23)
+extern int     TradingStartMinute               = 0;        // Start minute for trading (0-59)
+extern int     TradingEndMinute                 = 59;       // End minute for trading (0-59)
+
 extern string  Header1="----------EA General Settings-----------";
 extern int     MagicNumber                      = 8118201;
 extern int     TerminalType                     = 1;         //0 mean slave, 1 mean master
@@ -162,12 +172,7 @@ extern bool    UseMeanReversalATR               = False;     // Use Mean Reversa
 extern double  MeanReversalATRMultiplier        = 1;      // Mean Reversal ATR Multiplier
 extern double  MeanReversalLoHiDistance         = 5;    // Mean Reversal Low-High Distance Multiplier (in ATR units)
 
-extern string  Header21="----------Trading time settings-----------";
-extern int     TradingStartHour                 = 0;        // Start hour for trading (0-23)
-extern int     TradingEndHour                   = 23;       // End hour for trading (0-23)
-extern int     TradingStartMinute               = 0;        // Start minute for trading (0-59)
-extern int     TradingEndMinute                 = 59;       // End minute for trading (0-59)
-
+#include <Falcon_B_Include/LicenseManager.mqh>
 #include <Falcon_B_Include/01_GetHistoryOrder.mqh>
 #include <Falcon_B_Include/02_OrderProfitToCSV.mqh>
 #include <Falcon_B_Include/03_ReadCommandFromCSV.mqh>
@@ -185,6 +190,8 @@ int     RetryInterval                           = 100; // Pause Time before next
 int     MaxRetriesPerTick                       = 10;
 
 string  InternalHeader2="----------Service Variables-----------";
+
+CLicenseManager* LicenseManager;  // License management system
 
 int currentTerminal;
 
@@ -253,6 +260,53 @@ datetime ReferenceTime;       //used for order history
 int init()
   {
    
+//------------- License Check
+   // Initialize license manager
+   LicenseManager = new CLicenseManager();
+   
+   // Check license
+   bool licenseValid = false;
+   
+   if(LicenseKey != "" && LicenseManager.CheckLicense(LicenseKey))
+   {
+       licenseValid = true;
+       Comment("Falcon EA - Licensed Version - HW: " + StringSubstr(LicenseManager.GetHardwareFingerprint(), 0, 12));
+       
+       // Check if license is expiring soon
+       if(LicenseManager.IsLicenseExpiringSoon())
+       {
+           Alert("Warning: Your license will expire soon! Please renew.");
+       }
+   }
+   else if(EnableTrial)
+   {
+       int trialDays = LicenseManager.GetTrialDaysRemaining();
+       if(OnJournaling) Print("Trial days remaining: ", trialDays);
+       
+       if(trialDays > 0)
+       {
+           licenseValid = true;
+           Comment("Falcon EA - Trial Mode (" + IntegerToString(trialDays) + " days remaining) - HW: " + StringSubstr(LicenseManager.GetHardwareFingerprint(), 0, 12));
+           
+           // Warning when trial is expiring
+           if(trialDays <= 3)
+           {
+               Alert("Trial expires in " + IntegerToString(trialDays) + " days! Hardware ID: " + LicenseManager.GetHardwareFingerprint());
+           }
+       }
+       else
+       {
+           Comment("Trial period expired! Please purchase a license. Hardware ID: " + LicenseManager.GetHardwareFingerprint());
+           if(OnJournaling) Print("Trial period expired! Hardware ID: " + LicenseManager.GetHardwareFingerprint());
+       }
+   }
+   
+   if(!licenseValid)
+   {
+       Alert("No valid license found! Hardware ID: " + LicenseManager.GetHardwareFingerprint());
+       return(INIT_FAILED);
+   }
+
 //------------- Decision Support Centre
 // Write file to the sandbox if it's does not exist
 //    
@@ -439,6 +493,13 @@ int deinit()
         }
     }
     
+    // Cleanup license manager
+    if(LicenseManager != NULL)
+    {
+        delete LicenseManager;
+        LicenseManager = NULL;
+    }
+    
 //----
    return(0);
   }
@@ -450,6 +511,31 @@ int deinit()
 //+------------------------------------------------------------------+
 int start()
   {
+    // Check license validity periodically
+    static datetime lastLicenseCheck = 0;
+    if(TimeCurrent() - lastLicenseCheck > 3600) // Check every hour
+    {
+        if(LicenseManager != NULL && !LicenseManager.IsLicenseValid())
+        {
+            if(EnableTrial)
+            {
+                int trialDays = LicenseManager.GetTrialDaysRemaining();
+                if(trialDays <= 0)
+                {
+                    Comment("Trial expired! EA stopped. Hardware ID: " + LicenseManager.GetHardwareFingerprint());
+                    return(0);
+                }
+                Comment("Trial Mode (" + IntegerToString(trialDays) + " days remaining)");
+            }
+            else
+            {
+                Comment("License invalid! EA stopped. Hardware ID: " + LicenseManager.GetHardwareFingerprint());
+                return(0);
+            }
+        }
+        lastLicenseCheck = TimeCurrent();
+    }
+    
     Trigger = 0; // Reset trigger for entry/exit signals
     // lastOrderClosedByStopLoss = false;
     IsMeanReversal = false;

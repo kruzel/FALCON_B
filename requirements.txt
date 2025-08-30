@@ -1,0 +1,11 @@
+# Falcon License Generator Requirements
+# No external dependencies required - uses only Python standard library
+# Minimum Python version: 3.6+
+
+# Standard library modules used:
+# - tkinter (GUI)
+# - json (data storage)
+# - csv (bulk operations)
+# - datetime (timestamps)
+# - os (file operations)
+# - hashlib (not currently used but available for future encryption)
