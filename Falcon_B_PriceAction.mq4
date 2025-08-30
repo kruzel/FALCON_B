@@ -25,7 +25,7 @@ extern bool    IsTestMode                       = False; // Enable test mode
 
 extern string  HeaderLicense="----------License Settings-----------";
 extern string  LicenseKey                       = "";       // Enter your license key here (Format: FALCON-XXXXX-XXXXX-XXXXX-XXXX)
-extern bool    EnableTrial                      = true;     // Allow trial mode (7 days)
+bool    EnableTrial                      = true;     // Allow trial mode (7 days)
 
 extern string  Header21="----------Trading time settings-----------";
 extern int     TradingStartHour                 = 0;        // Start hour for trading (0-23)
