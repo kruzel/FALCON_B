@@ -59,7 +59,8 @@ extern string  Header23="----------Arears Management Settings-----------";
 extern bool    IsArearsManagementEnabled          = True; // Enable Arears Money Management
 extern double  ArearsMMSizeIncrement            = 0.5; // Arears Money Management increment %
 extern double  ArearsMMMaxMultiplier            = 3.0; // Maximum risk multiplier (safety cap)
-extern bool    UseProgressiveArears             = True; // Use progressive recovery calculation
+extern bool    UseProgressiveArears             = False; // Use progressive recovery calculation
+extern bool    UseMixedArears                   = True; // Use mixed recovery calculation
 extern double  ArearsRecoveryTarget             = 1.5; // Target recovery multiplier (% of losses)
 
 extern string  Header13="----------Set Max Loss Win Limit settings-----------";
@@ -362,8 +363,8 @@ int init()
 
    if(IsArearsManagementEnabled)
    {
-    int losses = GetConsecutiveFailureCount(MagicNumber);
-    double lossAmount = GetConsecutiveLossAmount(MagicNumber);
+    int losses = 0;;
+    double lossAmount = GetConsecutiveLossAmount(MagicNumber, losses);
     
     if(losses > 0)
     {
@@ -598,8 +599,8 @@ int start()
 
               if(IsArearsManagementEnabled)
               {
-                int losses = GetConsecutiveFailureCount(MagicNumber);
-                double lossAmount = GetConsecutiveLossAmount(MagicNumber);
+                int losses=0;
+                double lossAmount = GetConsecutiveLossAmount(MagicNumber, losses);
                 
                 if(losses > 0)
                 {
@@ -1392,7 +1393,7 @@ bool IsMaxPositionsReached(int MaxPositions,int Magic,bool Journaling)
 
 // This function checks the number of positions we are holding against the maximum allowed 
 
-   int result=False;
+   bool result=False;
    if(CountPosOrders(Magic,OP_BUY)+CountPosOrders(Magic,OP_SELL)>MaxPositions) 
      {
       result=True;
@@ -2807,8 +2808,8 @@ void SetHiddenVolTrailing(bool Journaling,double VolATR,double VolTrailingDistMu
 
 // This function adds new hidden volatility trailing stop record 
 
-   double VolTrailingStopLevel;
-   double VolTrailingStopDist;
+   double VolTrailingStopLevel=0;
+   double VolTrailingStopDist=0;
 
    VolTrailingStopDist=VolTrailingDistMultiplierHidden*VolATR/(K*Point); // Volatility trailing stop amount in Pips
 
@@ -3085,6 +3086,45 @@ double CalculateArearsRisk(int consecutiveLosses, double totalLossAmount)
                   " RequiredRisk=", requiredRiskPercent, "% ",
                   " AdjustedRisk=", adjustedRisk, "%");
     }
+    else if(UseMixedArears)
+    {
+      if(consecutiveLosses>0)
+      {
+        // Simple incremental approach (your current method)
+        adjustedRisk = Risk + (ArearsMMSizeIncrement * consecutiveLosses);
+        
+        // Apply safety cap
+        if(adjustedRisk > Risk * ArearsMMMaxMultiplier)
+            adjustedRisk = Risk * ArearsMMMaxMultiplier;
+            
+        if(OnJournaling) 
+            Print("Simple Arears: Losses=", consecutiveLosses, 
+                  " Increment=", ArearsMMSizeIncrement * consecutiveLosses, "% ",
+                  " AdjustedRisk=", adjustedRisk, "%");
+      }
+      else
+      {
+        // Progressive calculation to recover losses plus target profit
+        double accountBalance = AccountBalance();
+        
+        // Calculate required risk to recover losses + target profit in next trade
+        double requiredRecovery = MathAbs(totalLossAmount) * ArearsRecoveryTarget;
+        double requiredRiskPercent = (requiredRecovery / accountBalance) * 100;
+        
+        // Apply safety cap
+        if(requiredRiskPercent > Risk * ArearsMMMaxMultiplier)
+            requiredRiskPercent = Risk * ArearsMMMaxMultiplier;
+            
+        adjustedRisk = MathMax(Risk, requiredRiskPercent);
+
+        if(OnJournaling) 
+            Print("Mixed Arears: Losses=", consecutiveLosses, 
+                  " LossAmount=", totalLossAmount, 
+                  " RequiredRisk=", requiredRiskPercent, "% ",
+                  " AdjustedRisk=", adjustedRisk, "%");
+      }
+      
+    }
     else
     {
         // Simple incremental approach (your current method)
@@ -3104,51 +3144,6 @@ double CalculateArearsRisk(int consecutiveLosses, double totalLossAmount)
 }
 //+------------------------------------------------------------------+
 //| Calculate Arears Money Management Risk Size                      |
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Get Total Loss Amount from Consecutive Failures                  |
-//+------------------------------------------------------------------+
-double GetConsecutiveLossAmount(int Magic)
-{
-    double totalLoss = 0;
-    int consecutiveLosses = 0;
-    
-    // Get today's start time (start of current day)
-    datetime currentTime = TimeCurrent();
-    datetime todayStart = currentTime - (currentTime % 86400); // 86400 = seconds in a day
-    
-    // Check order history from most recent backwards
-    for(int i = OrdersHistoryTotal() - 1; i >= 0; i--)
-    {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
-        {
-            if(OrderSymbol() == Symbol() && 
-               OrderMagicNumber() == Magic && 
-               OrderCloseTime() >= todayStart &&
-               (OrderType() == OP_BUY || OrderType() == OP_SELL))
-            {
-                double profit = OrderProfit() + OrderSwap() + OrderCommission();
-                
-                if(profit < 0)
-                {
-                    totalLoss += profit; // Add negative profit (loss)
-                    consecutiveLosses++;
-                }
-                else
-                {
-                    break; // Stop at first profitable trade
-                }
-            }
-        }
-    }
-    
-    if(OnJournaling && totalLoss < 0)
-        Print("Consecutive losses: ", consecutiveLosses, " Total loss amount: ", totalLoss);
-    
-    return totalLoss;
-}
-//+------------------------------------------------------------------+
-//| Get Total Loss Amount from Consecutive Failures                  |
 //+------------------------------------------------------------------+
 
 void HandleTradingEnvironment(bool Journaling,int Retry_Interval)
