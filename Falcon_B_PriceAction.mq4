@@ -1,14 +1,14 @@
 //+------------------------------------------------------------------+
-//|                                          Falcon EA Template v2.0
-//|                                        Copyright 2015,Lucas Liew 
-//|                                  lucas@blackalgotechnologies.com 
+//|                                          Awesome EA Template v2.0
+//|                                        Copyright 2025,Ofer Kruzel
+//|                                             okruzel@gmail.com
 //+------------------------------------------------------------------+
 
-#property copyright "Copyright 2015, Black Algo Technologies Pte Ltd"
-#property copyright "Copyright 2018, Vladimir Zhbanko"
-#property link      "lucas@blackalgotechnologies.com"
-#property link      "https://vladdsm.github.io/myblog_attempt/"
-#property version   "1.001"  
+#property copyright "Copyright 2025, Black Algo Technologies Pte Ltd"
+#property copyright "Copyright 2025, Ofer Kruzel"
+#property link      "okruzel@gmail.com"
+// #property link      "https://vladdsm.github.io/myblog_attempt/"
+#property version   "1.0"  
 #property strict
 /* 
 
@@ -20,7 +20,7 @@ Falcon B:
 //+------------------------------------------------------------------+
 //| Setup                                               
 //+------------------------------------------------------------------+
-extern string  Version                           ="1.0";                   
+extern string  Version                           =  "1.0";                   
 
 extern string  HeaderLicense="----------License Settings-----------";
 extern string  LicenseKey                       = "";       // License Key (Format: FALCON-XXXXX-XXXXX-XXXXX-XXXX)
@@ -59,9 +59,7 @@ extern string  Header23="----------Arears Management Settings-----------";
 extern bool    IsArearsManagementEnabled          = True; // Enable Arears Money Management
 extern double  ArearsMMSizeIncrement            = 0.5; // Arears Money Management increment %
 extern double  ArearsMMMaxMultiplier            = 3.0; // Maximum risk multiplier (safety cap)
-extern bool    UseProgressiveArears             = False; // Use progressive recovery calculation
-extern bool    UseMixedArears                   = True; // Use mixed recovery calculation
-extern double  ArearsRecoveryTarget             = 1.5; // Target recovery multiplier (% of losses)
+extern bool    UseProgressiveArears             = True; // Use progressive recovery calculation
 
 extern string  Header13="----------Set Max Loss Win Limit settings-----------";
 extern bool    IsLossLimitActivated             = True; // Enable Max Loss Limit
@@ -347,10 +345,10 @@ int init()
    PriceActionStates = new CPriceActionStates();
    PriceActionStates.Init();
    if(UseSupportResistance)
-    SupportResistance = new CSupportResistance(SRmarginPoints, zigzagDepth, zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
+    SupportResistance = new CSupportResistance(SRmarginPoints, zigzagDepth,zigzagDeviation, zigzagBackstep); // margin=10 points, ZigZag params
 
     TradeController = new CTradingControl();
-    TradeController.CreateController(LossLimitPercent, WinLimitPercent);
+    TradeController.CreateController(LossLimitPercent, WinLimitPercent, IsTesting(), Version);
 
    PaResults paState = PriceActionStates.ProcessBars(1);
    if(UseSupportResistance)
@@ -361,25 +359,8 @@ int init()
       iCustom(NULL, 0, "Falcon_B_Indicator\\supply_and_demand_v1.8", 4, 0); // Get Supply Zone High
    }
 
-   if(IsArearsManagementEnabled)
-   {
-    int losses = 0;;
-    double lossAmount = GetConsecutiveLossAmount(MagicNumber, losses);
-    
-    if(losses > 0)
-    {
-        UpdatedRisk = CalculateArearsRisk(losses, lossAmount);
-        if(OnJournaling) 
-            Print("Arears Management - Losses: ", losses, 
-                  " Loss Amount: ", lossAmount, 
-                  " Updated Risk: ", UpdatedRisk, "%");
-    }
-  }
-  else
-  {
-    UpdatedRisk = Risk;
-    if(OnJournaling) Print("Updated Risk: ", UpdatedRisk, "%");
-  }
+  UpdatedRisk = CalculateArearsRisk();
+  if(OnJournaling) Print("Updated Risk: ", UpdatedRisk, "%");
 
   if(IsTesting() && OnChartShots)
   {
@@ -414,11 +395,6 @@ int init()
       Print("No screenshot files found or failed to access ScreenShots folder");
     }
   }
-
-  if(IsTesting())
-    (TradeController.SetTradingEnabled(True));
-
-  TradeController.SetVersion(Version);
 
    start();
    return(0);
@@ -482,7 +458,7 @@ int deinit()
         }
     }
 
-    str = "lotsize_";
+    str = "risksize_";
     // Loop backwards to avoid skipping objects when deleting
     for(int i = total - 1; i >= 0; i--)
     {
@@ -540,14 +516,6 @@ int start()
     // lastOrderClosedByStopLoss = false;
     IsMeanReversal = false;
 
-    static int lastOrder = 0;
-    int newClosedOrder = GetLastClosedOrderToday(MagicNumber);
-    if(lastOrder!=newClosedOrder)
-    {
-      lastOrder = newClosedOrder;
-      SaveChart();
-    }
-
     static int lastOpenOrder = 0;
     int newOpenOrder = GetLastOpenOrder(MagicNumber);
     if(lastOpenOrder != newOpenOrder)
@@ -557,9 +525,13 @@ int start()
       SaveChart();
     }
 
-    // If there are no open positions and we didn't handle the last losing trade yet
-    if(!lastOrderClosedByStopLoss && CountPosOrders(MagicNumber,-1) == 0)
+    static int lastOrder = 0;
+    int newClosedOrder = GetLastClosedOrderToday(MagicNumber);
+    if(lastOrder!=newClosedOrder)
     {
+      lastOrder = newClosedOrder;
+      SaveChart();
+
       double price;
       double profit;
       int type;
@@ -595,46 +567,17 @@ int start()
                 Trigger = 1;
                 if(OnJournaling) Print("Entry Signal - BUY after losing SELL trade"); 
               }
-              lastOrderClosedByStopLoss = true; // Store the last order profit}
-
-              if(IsArearsManagementEnabled)
-              {
-                int losses=0;
-                double lossAmount = GetConsecutiveLossAmount(MagicNumber, losses);
-                
-                if(losses > 0)
-                {
-                    UpdatedRisk = CalculateArearsRisk(losses, lossAmount);
-                    if(OnJournaling) 
-                        Print("Arears Update - Losses: ", losses, 
-                              " Loss Amount: ", lossAmount, 
-                              " Updated Risk: ", UpdatedRisk, "%");
-                }
-                else
-                {
-                    // Reset risk after winning trade
-                    if(UpdatedRisk > Risk)
-                    {
-                        UpdatedRisk = Risk;
-                        if(OnJournaling) Print("Arears Reset - Risk returned to: ", UpdatedRisk, "%");
-                    }
-                }
-              }
+              
             }
-
+            lastOrderClosedByStopLoss = true;
             VisualizeResultOverlay(time, 2, price);
           }
           else if(profit > 0)
           {
-            // Reset risk after winning trade
-            if(UpdatedRisk > Risk)
-            {
-                UpdatedRisk = Risk;
-                if(OnJournaling) Print("Arears Reset - Risk returned to: ", UpdatedRisk, "%");
-            }
-
             VisualizeResultOverlay(time, 1, price);
           }
+
+          UpdatedRisk = CalculateArearsRisk();
         }
       }
     }
@@ -688,6 +631,12 @@ int start()
    double currentSpread = MarketInfo(Symbol(), MODE_SPREAD); //points
    bool IsAfterExit = false;
    IsPinBar = false;
+  
+  if(!lastOrderClosedByStopLoss)
+  {
+    UpdatedRisk = CalculateArearsRisk();
+    if(OnJournaling) Print("Updated Risk: ", UpdatedRisk, "%");
+  }
 
    myATR=iATR(NULL,Period(),atr_period,1);
 
@@ -708,35 +657,27 @@ int start()
     LossLimitPercent = TradeController.GetLossTarget();
     WinLimitPercent = TradeController.GetWinTarget();
 
-    if(!TradeController.IsTradingEnabled())
+    if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
     {
-      if(TradingStartHour!=-1 && TradingEndHour!=-1 && TradingStartMinute!=-1 && TradingEndMinute!=-1)
+      datetime localTime = TimeLocal();
+      int currentHour = TimeHour(localTime);
+      int currentMinute = TimeMinute(localTime);
+
+      bool isBeforeStart = (currentHour < TradingStartHour) || (currentHour == TradingStartHour && currentMinute < TradingStartMinute);
+      bool isAfterEnd = (currentHour > TradingEndHour) || (currentHour == TradingEndHour && currentMinute > TradingEndMinute);
+
+      if (TradingStartHour <= TradingEndHour) // Normal time range within the same day
       {
-        datetime localTime = TimeLocal();
-        int currentHour = TimeHour(localTime);
-        int currentMinute = TimeMinute(localTime);
-
-        bool isBeforeStart = (currentHour < TradingStartHour) || (currentHour == TradingStartHour && currentMinute < TradingStartMinute);
-        bool isAfterEnd = (currentHour > TradingEndHour) || (currentHour == TradingEndHour && currentMinute > TradingEndMinute);
-
-        if (TradingStartHour <= TradingEndHour) // Normal time range within the same day
+        if (isBeforeStart || isAfterEnd)
         {
-          if (isBeforeStart || isAfterEnd)
-          {
-            TradeController.SetTradingEnabled(false);
-            if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
-            return (0);
-          }
+          if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
+          return (0);
         }
-        else // Time range spans midnight
-        {
-          if (!isBeforeStart && !isAfterEnd)
-          {
-            TradeController.SetTradingEnabled(false);
-            if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
-            return (0);
-          }
-        }
+      }
+      else if (!isBeforeStart && !isAfterEnd) // Time range spans midnight
+      {
+        if (OnJournaling) Print("waiting for valid trading time: ", TradingStartHour, ":", TradingStartMinute);
+        return (0);
       }
     }
 
@@ -1012,29 +953,24 @@ int start()
    {  
     if(IsLossLimitBreached(IsLossLimitActivated,LossLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber) == True) 
     {
-        // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
         if(OnJournaling) Print("Loss limit breached, no new trades will be opened until reset.");
         return (0);
     }
 
     if(IsWinLimitBreached(IsWinLimitActivated,WinLimitPercent,OnJournaling,EntrySignal(Trigger), MagicNumber)==True) 
     {
-        // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
         if(OnJournaling) Print("Win limit breached, no new trades will be opened until reset.");
         return (0);
     }
 
     if(IsVolLimitBreached(IsVolLimitActivated,VolatilityMultiplier,ATRTimeframe,ATRPeriod)==True)
     {
-        // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
         if(OnJournaling) Print("Volatility limit breached, no new trades will be opened until reset.");
         return (0); // Exit if volatility limit is breached
     }
 
     if(IsMaxPositionsReached(MaxPositionsAllowed,MagicNumber,OnJournaling)==True)
     {
-        // if(OnJournaling) Print("Max positions reached, cannot open new trades.");
-        // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
         return (0);
     }
 
@@ -1050,7 +986,6 @@ int start()
     if(!IsMeanReversal && BreakoutState!=BO_TRIGGERED && GetConsecutiveFailureCount(MagicNumber)>=MaxConsecutiveFailures) // && Trigger==0 && !IsAfterExit
       {
           BreakoutState = BO_WAITING;
-          // lastOrderClosedByStopLoss = false; // Reset flag, wait for next bar
           if(OnJournaling) Print("Max consecutive failures reached, no new trades will be opened until breakout.");
           return (0); // Exit without opening new trades
         }
@@ -1083,7 +1018,7 @@ int start()
       // Display lot size on chart if order was successful
       if(OrderNumber > 0 && OrderSelect(OrderNumber, SELECT_BY_TICKET) && ShowLotSizeOnChart)
       {
-         DisplayLotSizeOnChart(OrderOpenTime(), OrderOpenPrice(), lotSize, OP_BUY);
+         DisplayRiskSizeOnChart(OrderOpenTime(), OrderOpenPrice(), UpdatedRisk, lotSize, OP_BUY);
       }
 
       // Set Stop Loss value for Hidden SL
@@ -1116,7 +1051,7 @@ int start()
       // Display lot size on chart if order was successful
       if(OrderNumber > 0 && OrderSelect(OrderNumber, SELECT_BY_TICKET) && ShowLotSizeOnChart)
       {
-         DisplayLotSizeOnChart(OrderOpenTime(), OrderOpenPrice(), lotSize, OP_SELL);
+         DisplayRiskSizeOnChart(OrderOpenTime(), OrderOpenPrice(), UpdatedRisk, lotSize, OP_SELL);
       }
 
       // Set Stop Loss value for Hidden SL
@@ -1141,6 +1076,7 @@ int start()
       }
     }
 
+    lastOrderClosedByStopLoss = false; 
 
 //----------Pending Order Management-----------
 /*
@@ -1148,9 +1084,6 @@ int start()
    */
 
 //----
-
-    // reset states variables 
-    lastOrderClosedByStopLoss = false;
 
    return(0);
   }
@@ -3058,72 +2991,67 @@ double CalculateTakeProfit()
 //+------------------------------------------------------------------+
 //| Calculate Arears Money Management Risk Size                      |
 //+------------------------------------------------------------------+
-double CalculateArearsRisk(int consecutiveLosses, double totalLossAmount)
+double CalculateArearsRisk()
 {
-    double adjustedRisk = Risk;
-    
-    if(!IsArearsManagementEnabled || consecutiveLosses <= 0)
+    double adjustedRisk = UpdatedRisk;
+
+    if(!IsArearsManagementEnabled)
         return adjustedRisk;
+
+    static int prvOrder = 0;
+
+    double price;
+    double profit;
+    int type;
+    int order;
+    datetime time;
+    CloseReason closeReason;
+    if(!GetLastProfit(MagicNumber, order, time, profit, type, price, closeReason, Symbol()))
+      return adjustedRisk;
+
+    if(prvOrder==order)
+      return adjustedRisk;
     
+    prvOrder = order;
+
+    static double MaxProfitToday = 0;
+    int consecutiveLosses = 0;
+    double lossAmount = GetConsecutiveLossAmount(MagicNumber, consecutiveLosses);
+    double profitToday = GetProfitToday(MagicNumber);
+    double accountBalance = AccountBalance();
+
+    if(profitToday > MaxProfitToday)
+        MaxProfitToday = profitToday;
+
     if(UseProgressiveArears)
     {
-        // Progressive calculation to recover losses plus target profit
-        double accountBalance = AccountBalance();
-        
-        // Calculate required risk to recover losses + target profit in next trade
-        double requiredRecovery = MathAbs(totalLossAmount) * ArearsRecoveryTarget;
-        double requiredRiskPercent = (requiredRecovery / accountBalance) * 100;
-        
-        // Apply safety cap
-        if(requiredRiskPercent > Risk * ArearsMMMaxMultiplier)
-            requiredRiskPercent = Risk * ArearsMMMaxMultiplier;
-            
-        adjustedRisk = MathMax(Risk, requiredRiskPercent);
-        
-        if(OnJournaling) 
-            Print("Progressive Arears: Losses=", consecutiveLosses, 
-                  " LossAmount=", totalLossAmount, 
-                  " RequiredRisk=", requiredRiskPercent, "% ",
-                  " AdjustedRisk=", adjustedRisk, "%");
-    }
-    else if(UseMixedArears)
-    {
-      if(consecutiveLosses>0)
-      {
-        // Simple incremental approach (your current method)
-        adjustedRisk = Risk + (ArearsMMSizeIncrement * consecutiveLosses);
-        
-        // Apply safety cap
-        if(adjustedRisk > Risk * ArearsMMMaxMultiplier)
+        if(consecutiveLosses > 0) // We have new loss (consecutive losses but maybe overall positive today)
+        {
+          // Increase risk by increment for new loss
+          adjustedRisk = adjustedRisk + ArearsMMSizeIncrement;
+          
+          // Apply safety cap
+          if(adjustedRisk > Risk * ArearsMMMaxMultiplier)
             adjustedRisk = Risk * ArearsMMMaxMultiplier;
-            
-        if(OnJournaling) 
-            Print("Simple Arears: Losses=", consecutiveLosses, 
-                  " Increment=", ArearsMMSizeIncrement * consecutiveLosses, "% ",
-                  " AdjustedRisk=", adjustedRisk, "%");
-      }
-      else
-      {
-        // Progressive calculation to recover losses plus target profit
-        double accountBalance = AccountBalance();
-        
-        // Calculate required risk to recover losses + target profit in next trade
-        double requiredRecovery = MathAbs(totalLossAmount) * ArearsRecoveryTarget;
-        double requiredRiskPercent = (requiredRecovery / accountBalance) * 100;
-        
-        // Apply safety cap
-        if(requiredRiskPercent > Risk * ArearsMMMaxMultiplier)
-            requiredRiskPercent = Risk * ArearsMMMaxMultiplier;
-            
-        adjustedRisk = MathMax(Risk, requiredRiskPercent);
-
-        if(OnJournaling) 
-            Print("Mixed Arears: Losses=", consecutiveLosses, 
-                  " LossAmount=", totalLossAmount, 
-                  " RequiredRisk=", requiredRiskPercent, "% ",
-                  " AdjustedRisk=", adjustedRisk, "%");
-      }
-      
+        }
+        else 
+        {
+          // Calculate required risk to recover losses + target profit
+          double targetProfit = Risk * accountBalance / 100; // Target profit in currency
+          double totalTarget = targetProfit;
+          // double totalTarget = MaxProfitToday;
+          if(profitToday<0)
+            totalTarget = MathAbs(profitToday) + targetProfit; // Total needed to recover + profit
+            // totalTarget = MathAbs(profitToday) + MaxProfitToday; // Total needed to recover + profit
+          
+          // Calculate what percentage of balance we need to risk to achieve this target
+          // Assuming average win rate and risk-reward ratio
+          adjustedRisk = (totalTarget / accountBalance) * 100;
+          
+          // Apply safety cap
+          if(adjustedRisk > Risk * ArearsMMMaxMultiplier)
+            adjustedRisk = Risk * ArearsMMMaxMultiplier;
+        }
     }
     else
     {
@@ -3134,12 +3062,44 @@ double CalculateArearsRisk(int consecutiveLosses, double totalLossAmount)
         if(adjustedRisk > Risk * ArearsMMMaxMultiplier)
             adjustedRisk = Risk * ArearsMMMaxMultiplier;
             
-        if(OnJournaling) 
-            Print("Simple Arears: Losses=", consecutiveLosses, 
-                  " Increment=", ArearsMMSizeIncrement * consecutiveLosses, "% ",
-                  " AdjustedRisk=", adjustedRisk, "%");
     }
-    
+
+    if(OnJournaling)
+    {             
+      string csvFileName = "AreasManagement_" + Symbol() + "_" + TimeToString(TimeCurrent(), TIME_DATE) + ".csv";
+      int csvHandle = FileOpen(csvFileName, FILE_CSV | FILE_WRITE | FILE_READ);
+      
+      if(csvHandle != INVALID_HANDLE)
+      {
+          // Check if file is empty and add header if needed
+          if(FileSize(csvHandle) == 0)
+          {
+          FileWrite(csvHandle, "Time,Symbol,Size,Result,Profit,Accumulated_Profit,Arears");
+          }
+          
+          // Move to end of file to append
+          FileSeek(csvHandle, 0, SEEK_END);
+
+          string res = (profit < 0) ? "Loss" : "Win";
+          
+          // Write data row
+          string csvRow = TimeToString(TimeCurrent(), TIME_DATE | TIME_MINUTES) + "," +
+                Symbol() + "," +
+                DoubleToString(UpdatedRisk, 2) + "," +
+                res + "," +
+                DoubleToString(profit, 2) + "," +
+                DoubleToString(profitToday, 2) + "," +
+                DoubleToString(profitToday - Risk / 100 * accountBalance, 2);          
+          FileWrite(csvHandle, csvRow);
+          
+          FileClose(csvHandle);
+      }
+      else
+      {
+        Print("Failed to open CSV file: ", csvFileName, " Error: ", GetLastError());
+      }
+    }
+
     return adjustedRisk;
 }
 //+------------------------------------------------------------------+
@@ -3384,18 +3344,15 @@ void VisualizeResultOverlay(datetime now, int winloss, double price)
 }
 
 //+------------------------------------------------------------------+
-//| Display Lot Size Near Entry Point                               |
+//| Display Risk Size Near Entry Point                               |
 //+------------------------------------------------------------------+
-void DisplayLotSizeOnChart(datetime entryTime, double entryPrice, double lotSize, int orderType)
+void DisplayRiskSizeOnChart(datetime entryTime, double entryPrice, double risk, double size, int orderType)
 {
-   static int lotDisplayCounter = 0;
+   static int riskDisplayCounter = 0;
    
    // Create unique name for the text object
-   string name = "lotsize_" + IntegerToString(lotDisplayCounter++) + "_time_" + TimeToString(entryTime, TIME_MINUTES);
-   
-   // Format lot size text
-   string lotText = " " + DoubleToString(lotSize, 0);
-   
+   string name = "risksize_" + IntegerToString(riskDisplayCounter++) + "_time_" + TimeToString(entryTime, TIME_MINUTES);
+      
    // Set color based on order type
    color textColor = (orderType == OP_BUY) ? clrGreen : clrRed;
    
@@ -3410,10 +3367,9 @@ void DisplayLotSizeOnChart(datetime entryTime, double entryPrice, double lotSize
       textPrice = entryPrice - (Point); // Below entry for sell orders
    }
 
-  // Calculate lot size as percentage of balance for display
-  double balancePercent = (lotSize * MarketInfo(Symbol(), MODE_MARGINREQUIRED) / AccountBalance());
-  string percentText = " (" + DoubleToString(balancePercent, 1) + "%)";
-  lotText = lotText + percentText;
+  string sizeText = " " + DoubleToString(size, 1);
+  string riskText = " (" + DoubleToString(risk, 1) + "%)";
+  riskText = sizeText + riskText;
    
    // Delete any existing object with the same name
    ObjectDelete(name);
@@ -3421,13 +3377,13 @@ void DisplayLotSizeOnChart(datetime entryTime, double entryPrice, double lotSize
    // Create text object
   if(ObjectCreate(name, OBJ_TEXT, 0, entryTime, textPrice))
   {
-    ObjectSetText(name, lotText, 10, "Arial", textColor);
+    ObjectSetText(name, riskText, 10, "Arial", textColor);
     ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_LEFT);
     ObjectSet(name, OBJPROP_STYLE, STYLE_SOLID);
     ObjectSet(name, OBJPROP_COLOR, textColor);
     ObjectSet(name, OBJPROP_BACK, false); // Draw in foreground
       
-    if(OnJournaling) Print("Lot size display created: ", name, " Size: ", lotText, " at ", TimeToString(entryTime));
+    if(OnJournaling) Print("Lot size display created: ", name, " Size: ", riskText, " at ", TimeToString(entryTime));
    }
    else
    {
