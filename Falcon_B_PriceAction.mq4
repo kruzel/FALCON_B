@@ -89,7 +89,8 @@ extern bool    UseFixedTakeProfit               = False; // Fixed size take prof
 extern double  FixedTakeProfit                  = 0; // Hard Take Profit in Pips. Will be overridden if vol-based TP is true 
 extern bool    IsVolatilityTakeProfitOn         = False;
 extern double  VolBasedTPMultiplier             = 6; // Take Profit Amount in units of Volatility
-extern double  TakeProfitMarginATRMultiplier    = 0.2; // Take Profit margin ATR Multiplier
+extern double  TakeProfitMarginATRMultiplier    = 0.5; // Take Profit margin ATR Multiplier
+extern double  MinTakeProfitATRMultiplier       = 0.5; // Min Take Profit margin ATR Multiplier
 
 extern string  Header5="----------Hidden TP & SL Settings-----------";
 extern bool    UseHiddenStopLoss                = False;
@@ -2961,9 +2962,10 @@ double CalculateTakeProfit()
       {
         if(Ask + Take*(PipFactor*Point) + TakeProfitMarginATRMultiplier * myATR > prev_ner_hi_zone_P2) //P2 is the lower bound of the supply zone
         {
-          // Print("Take Profit is close to supply zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_hi_zone_P2: ", prev_ner_hi_zone_P2, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
+          double prvTake = Take;
           Take = (prev_ner_hi_zone_P2 - Ask - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
-          if(Take < TakeProfitMarginATRMultiplier * myATR)
+          Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
+          if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take > MinTakeProfitATRMultiplier*myATR/(PipFactor*Point))
           {
             if(OnJournaling) Print("Take Profit is too close or above to supply zone, canceling signal");
             Trigger = 0; //Cancel signal
@@ -2973,9 +2975,10 @@ double CalculateTakeProfit()
       } 
       else if(Bid - Take*(PipFactor*Point) - TakeProfitMarginATRMultiplier * myATR < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
       {
-        // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " Close[o]: ", Close[0], " ner_lo_zone_P1: ", prev_ner_lo_zone_P1, " supplyDemandMargin: ", supplyDemandMarginPoints*Point);
+        double prvTake = Take;
         Take = (Bid - prev_ner_lo_zone_P1 - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the demand zone
-        if(Take < TakeProfitMarginATRMultiplier * myATR) // Ensure Take is not too small
+        Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
+        if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take > MinTakeProfitATRMultiplier*myATR/(PipFactor*Point)) // Ensure Take is not too small
         {
           if(OnJournaling) Print("Take Profit is too close or below to demand zone, canceling signal");
           Trigger = 0; //Cancel signal
