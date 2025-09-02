@@ -52,7 +52,7 @@ extern double  LotAdjustFactor                  = 1; // Lot Adjustment Factor, f
 extern string  Header24="----------Trading Limits Settings-----------";
 extern double  MaxSpread                        = 50; // Maximum spread (Points)
 extern bool    UseMaxSpreadATR                  = True;
-extern double  MaxSpreadATRMultiplier           = 3.0; // Maximum spread (ATR Multiplier)
+extern double  MaxSpreadATRMultiplier           = 0.3; // Maximum spread (ATR Multiplier)
 extern double  MinBarSize                       = 50; // Minimum bar size (Points)
 
 extern string  Header23="----------Arears Management Settings-----------";
@@ -682,7 +682,7 @@ int start()
     }
 
     if(UseMaxSpreadATR)
-        MaxSpread = myATR / Point / MaxSpreadATRMultiplier;
+        MaxSpread = myATR / Point * MaxSpreadATRMultiplier;
 
     if( currentSpread  > MaxSpread )
     {
