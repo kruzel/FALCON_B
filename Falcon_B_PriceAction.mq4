@@ -361,7 +361,6 @@ int init()
    }
 
   UpdatedRisk = CalculateArearsRisk();
-  if(OnJournaling) Print("Updated Risk: ", UpdatedRisk, "%");
 
   if(IsTesting() && OnChartShots)
   {
@@ -3022,6 +3021,8 @@ double CalculateArearsRisk()
     double lossAmount = GetConsecutiveLossAmount(MagicNumber, consecutiveLosses);
     double profitToday = GetProfitToday(MagicNumber);
     double accountBalance = AccountBalance();
+    double dailyTarget = Risk * accountBalance / 100; // Target profit in currency
+    double arears = profitToday - dailyTarget; // Current arears in currency
 
     if(profitToday > MaxProfitToday)
         MaxProfitToday = profitToday;
@@ -3039,8 +3040,7 @@ double CalculateArearsRisk()
         }
         else 
         {
-          double dailyTarget = Risk * accountBalance / 100; // Target profit in currency
-          double arears = profitToday - dailyTarget; // Current arears in currency
+          
           if(arears > -dailyTarget)
             arears = -dailyTarget;
 
@@ -3072,7 +3072,7 @@ double CalculateArearsRisk()
           // Check if file is empty and add header if needed
           if(FileSize(csvHandle) == 0)
           {
-          FileWrite(csvHandle, "Time,Symbol,Size,Result,Profit,Accumulated_Profit,Arears");
+          FileWrite(csvHandle, "Time,Symbol,Size,Result,Profit,Accumulated_Profit,Arear, dailyTarget, accountBalance");
           }
           
           // Move to end of file to append
@@ -3087,7 +3087,9 @@ double CalculateArearsRisk()
                 res + "," +
                 DoubleToString(profit, 2) + "," +
                 DoubleToString(profitToday, 2) + "," +
-                DoubleToString(profitToday - Risk / 100 * accountBalance, 2);          
+                DoubleToString(arears, 2) + "," +
+                DoubleToString(dailyTarget, 2) + "," +
+                DoubleToString(accountBalance, 2);
           FileWrite(csvHandle, csvRow);
           
           FileClose(csvHandle);
