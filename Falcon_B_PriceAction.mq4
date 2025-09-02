@@ -635,7 +635,7 @@ int start()
   if(!lastOrderClosedByStopLoss)
   {
     UpdatedRisk = CalculateArearsRisk();
-    if(OnJournaling) Print("Updated Risk: ", UpdatedRisk, "%");
+    // if(OnJournaling) Print("Updated Risk: ", UpdatedRisk, "%");
   }
 
    myATR=iATR(NULL,Period(),atr_period,1);
@@ -3036,18 +3036,13 @@ double CalculateArearsRisk()
         }
         else 
         {
-          // Calculate required risk to recover losses + target profit
-          double targetProfit = Risk * accountBalance / 100; // Target profit in currency
-          double totalTarget = targetProfit;
-          // double totalTarget = MaxProfitToday;
-          if(profitToday<0)
-            totalTarget = MathAbs(profitToday) + targetProfit; // Total needed to recover + profit
-            // totalTarget = MathAbs(profitToday) + MaxProfitToday; // Total needed to recover + profit
-          
-          // Calculate what percentage of balance we need to risk to achieve this target
-          // Assuming average win rate and risk-reward ratio
-          adjustedRisk = (totalTarget / accountBalance) * 100;
-          
+          double dailyTarget = Risk * accountBalance / 100; // Target profit in currency
+          double arears = profitToday - dailyTarget; // Current arears in currency
+          if(arears > -dailyTarget)
+            arears = -dailyTarget;
+
+          adjustedRisk = (MathAbs(arears) / accountBalance) * 100;
+
           // Apply safety cap
           if(adjustedRisk > Risk * ArearsMMMaxMultiplier)
             adjustedRisk = Risk * ArearsMMMaxMultiplier;
@@ -3383,12 +3378,12 @@ void DisplayRiskSizeOnChart(datetime entryTime, double entryPrice, double risk, 
     ObjectSet(name, OBJPROP_COLOR, textColor);
     ObjectSet(name, OBJPROP_BACK, false); // Draw in foreground
       
-    if(OnJournaling) Print("Lot size display created: ", name, " Size: ", riskText, " at ", TimeToString(entryTime));
+    // if(OnJournaling) Print("Lot size display created: ", name, " Size: ", riskText, " at ", TimeToString(entryTime));
    }
-   else
-   {
-      if(OnJournaling) Print("Failed to create lot size display: ", name);
-   }
+  //  else
+  //  {
+  //     if(OnJournaling) Print("Failed to create lot size display: ", name);
+  //  }
 }
 
 //+------------------------------------------------------------------+
