@@ -1007,19 +1007,17 @@ int start()
       }
     }
 
-    if(Take==0)
-    {
-      if(OnJournaling) Print("Take profit 0, no new trades will be opened.");
-      return (0);
-    }
-
 // ---------- positions processing ----------
   // TODO: if IsPinBar then open limit order above / below pinbar high / low
 
    if(TradeAllowed && EntrySignal(Trigger)==1)
     { // Open Long Positions
       double lotSize = GetLot(IsSizingOn,Lots,UpdatedRisk,Stop, PipFactor,LotAdjustFactor);
-      // Print("Opening Long Position: ", lotSize, " lots");
+      // if(lotSize == 0)
+      // {
+      //   Print("Requested Position: ", lotSize, " lots, " , MarketInfo(Symbol(), MODE_MINLOT), " min lot,  canceling signal");
+      //   return(0);
+      // }
       OrderNumber=OpenPositionMarket(OP_BUY,lotSize,Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Display lot size on chart if order was successful
@@ -1053,7 +1051,11 @@ int start()
    if(TradeAllowed && EntrySignal(Trigger)==2)
     { // Open Short Positions
       double lotSize = GetLot(IsSizingOn,Lots,UpdatedRisk,Stop,PipFactor,LotAdjustFactor);
-      // Print("Opening Short Position: ", lotSize, " lots");
+      // if(lotSize == 0)
+      // {
+      //   Print("Requested Short Position: ", lotSize, " lots, " ,MarketInfo(Symbol(), MODE_MINLOT), " min lot,  canceling signal");
+      //   return(0);
+      // }
       OrderNumber=OpenPositionMarket(OP_SELL,lotSize,Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Display lot size on chart if order was successful
@@ -2975,6 +2977,7 @@ double CalculateTakeProfit()
           if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point))
           {
             Take = 0;
+            Trigger = 0;
             if(OnJournaling) Print("Take Profit is too close or above to supply zone");
           }
         }
@@ -2988,6 +2991,7 @@ double CalculateTakeProfit()
         if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point)) // Ensure Take is not too small
         {
           Take = 0;
+          Trigger = 0;
           if(OnJournaling) Print("Take Profit is too close or below to demand zone");
         }
       }
@@ -3048,7 +3052,7 @@ double CalculateArearsRisk()
         }
         else 
         {
-          if(arears < 0)
+          if(arears < -dailyTarget)
             adjustedRisk = (MathAbs(arears) / accountBalance) * 100;
           else
             adjustedRisk = Risk;
