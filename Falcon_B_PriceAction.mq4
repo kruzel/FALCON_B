@@ -1013,6 +1013,7 @@ int start()
    if(TradeAllowed && EntrySignal(Trigger)==1)
     { // Open Long Positions
       double lotSize = GetLot(IsSizingOn,Lots,UpdatedRisk,Stop, PipFactor,LotAdjustFactor);
+      Print("Opening Long Position: ", lotSize, " lots");
       OrderNumber=OpenPositionMarket(OP_BUY,lotSize,Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Display lot size on chart if order was successful
@@ -1046,6 +1047,7 @@ int start()
    if(TradeAllowed && EntrySignal(Trigger)==2)
     { // Open Short Positions
       double lotSize = GetLot(IsSizingOn,Lots,UpdatedRisk,Stop,PipFactor,LotAdjustFactor);
+      Print("Opening Short Position: ", lotSize, " lots");
       OrderNumber=OpenPositionMarket(OP_SELL,lotSize,Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Display lot size on chart if order was successful
@@ -3016,16 +3018,16 @@ double CalculateArearsRisk()
     
     prvOrder = order;
 
-    static double MaxProfitToday = 0;
     int consecutiveLosses = 0;
     double lossAmount = GetConsecutiveLossAmount(MagicNumber, consecutiveLosses);
     double profitToday = GetProfitToday(MagicNumber);
+    double sumProfitFromLoss = GetSumProfitSinceLoss(MagicNumber, Symbol());
     double accountBalance = AccountBalance();
     double dailyTarget = Risk * accountBalance / 100; // Target profit in currency
-    double arears = profitToday - dailyTarget; // Current arears in currency
 
-    if(profitToday > MaxProfitToday)
-        MaxProfitToday = profitToday;
+    double arears = sumProfitFromLoss; // Current arears in currency
+    if (arears > 0) 
+      arears = 0;
 
     if(UseProgressiveArears)
     {
@@ -3040,11 +3042,10 @@ double CalculateArearsRisk()
         }
         else 
         {
-          
-          if(arears > -dailyTarget)
-            arears = -dailyTarget;
-
-          adjustedRisk = (MathAbs(arears) / accountBalance) * 100;
+          if(arears < 0)
+            adjustedRisk = (MathAbs(arears) / accountBalance) * 100;
+          else
+            adjustedRisk = Risk;
 
           // Apply safety cap
           if(adjustedRisk > Risk * ArearsMMMaxMultiplier)
@@ -3072,7 +3073,7 @@ double CalculateArearsRisk()
           // Check if file is empty and add header if needed
           if(FileSize(csvHandle) == 0)
           {
-          FileWrite(csvHandle, "Time,Symbol,Size,Result,Profit,Accumulated_Profit,Arear, dailyTarget, accountBalance");
+          FileWrite(csvHandle, "Time,Symbol,Risk%,Result,Profit,Accumulated_Profit,Arear, accountBalance");
           }
           
           // Move to end of file to append
@@ -3088,10 +3089,9 @@ double CalculateArearsRisk()
                 DoubleToString(profit, 2) + "," +
                 DoubleToString(profitToday, 2) + "," +
                 DoubleToString(arears, 2) + "," +
-                DoubleToString(dailyTarget, 2) + "," +
                 DoubleToString(accountBalance, 2);
+                                ;
           FileWrite(csvHandle, csvRow);
-          
           FileClose(csvHandle);
       }
       else
