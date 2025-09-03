@@ -517,7 +517,7 @@ int start()
     IsMeanReversal = false;
 
     static int lastOpenOrder = 0;
-    int newOpenOrder = GetLastOpenOrder(MagicNumber);
+    int newOpenOrder = GetLastOpenOrder(MagicNumber, Symbol());
     if(lastOpenOrder != newOpenOrder)
     {
       lastOpenOrder = newOpenOrder;
@@ -526,7 +526,7 @@ int start()
     }
 
     static int lastOrder = 0;
-    int newClosedOrder = GetLastClosedOrderToday(MagicNumber);
+    int newClosedOrder = GetLastClosedOrderToday(MagicNumber, Symbol());
     if(lastOrder!=newClosedOrder)
     {
       lastOrder = newClosedOrder;
@@ -1798,7 +1798,7 @@ bool IsLossLimitBreached(bool LossLimitActivated,double LossLimitPercentage,bool
 
   
 
-   profitAndLoss=(GetProfitToday(Magic)/initialCapital);
+   profitAndLoss=(GetProfitToday(Magic, Symbol())/initialCapital);
 
    if(profitAndLoss<LossLimitPercentage/100)
      {
@@ -1837,7 +1837,7 @@ bool IsWinLimitBreached(bool WinLimitActivated,double WinLimitPercentage,bool Jo
       firstTick=True;
      }
 
-   profitAndLoss=(GetProfitToday(Magic)/initialCapital2);
+   profitAndLoss=(GetProfitToday(Magic, Symbol())/initialCapital2);
 
    if(profitAndLoss>WinLimitPercentage/100)
      {
@@ -3020,7 +3020,7 @@ double CalculateArearsRisk()
 
     int consecutiveLosses = 0;
     double lossAmount = GetConsecutiveLossAmount(MagicNumber, consecutiveLosses);
-    double profitToday = GetProfitToday(MagicNumber);
+    double profitToday = GetProfitToday(MagicNumber, Symbol());
     double sumProfitFromLoss = GetSumProfitSinceLoss(MagicNumber, Symbol());
     double accountBalance = AccountBalance();
     double dailyTarget = Risk * accountBalance / 100; // Target profit in currency
