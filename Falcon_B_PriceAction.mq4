@@ -692,7 +692,7 @@ int start()
 
     if(MathAbs(Close[1] - Open[1]) < MinBarSize * Point)
     {
-      if(OnJournaling) Print("Previous bar size is too small: ", MathAbs(Close[1] - Open[1])/Point, " points. Min required: ", MinBarSize, " points");
+      if(OnJournaling) Print("Previous bar size is too small: ", NormalizeDouble(MathAbs(Close[1] - Open[1])/Point,1), " points. Min required: ", MinBarSize, " points");
       return (0); // Exit if previous bar size is too small
     }
 
@@ -1019,7 +1019,7 @@ int start()
    if(TradeAllowed && EntrySignal(Trigger)==1)
     { // Open Long Positions
       double lotSize = GetLot(IsSizingOn,Lots,UpdatedRisk,Stop, PipFactor,LotAdjustFactor);
-      Print("Opening Long Position: ", lotSize, " lots");
+      // Print("Opening Long Position: ", lotSize, " lots");
       OrderNumber=OpenPositionMarket(OP_BUY,lotSize,Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Display lot size on chart if order was successful
@@ -1053,7 +1053,7 @@ int start()
    if(TradeAllowed && EntrySignal(Trigger)==2)
     { // Open Short Positions
       double lotSize = GetLot(IsSizingOn,Lots,UpdatedRisk,Stop,PipFactor,LotAdjustFactor);
-      Print("Opening Short Position: ", lotSize, " lots");
+      // Print("Opening Short Position: ", lotSize, " lots");
       OrderNumber=OpenPositionMarket(OP_SELL,lotSize,Stop,Take,MagicNumber,Slippage,OnJournaling,PipFactor,IsECNbroker,MaxRetriesPerTick,RetryInterval);
 
       // Display lot size on chart if order was successful
@@ -2971,7 +2971,7 @@ double CalculateTakeProfit()
         {
           double prvTake = Take;
           Take = (prev_ner_hi_zone_P2 - Ask - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
-          Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
+          // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
           if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point))
           {
             if(OnJournaling) Print("Take Profit is too close or above to supply zone");
@@ -2983,7 +2983,7 @@ double CalculateTakeProfit()
       {
         double prvTake = Take;
         Take = (Bid - prev_ner_lo_zone_P1 - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the demand zone
-        Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
+        // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
         if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point)) // Ensure Take is not too small
         {
           if(OnJournaling) Print("Take Profit is too close or below to demand zone");
