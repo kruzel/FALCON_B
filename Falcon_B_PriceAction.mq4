@@ -686,7 +686,7 @@ int start()
 
     if( currentSpread  > MaxSpread )
     {
-      if(OnJournaling) Print("Current spread is too high: ", currentSpread, " points. Max allowed: ", MaxSpread, " points");
+      if(OnJournaling) Print("Current spread is too high: ", NormalizeDouble(currentSpread, 1), " points. Max allowed: ", NormalizeDouble(MaxSpread, 1), " points");
       return (0); // Exit if spread is too high
     }
 
@@ -2887,12 +2887,12 @@ double CalculateStopLoss(int K)
             if(Stop*(PipFactor*Point)<MinStopLossATRMultiplier*myATR) 
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              Print("Stop too small, using ATR for Stop Loss: ", Stop);
+              if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
             } 
             else if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              Print("Stop is too large, using ATR for Stop Loss: ", Stop);
+              if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
             }
           }
         } 
@@ -2916,12 +2916,12 @@ double CalculateStopLoss(int K)
             if(Stop*(PipFactor*Point)<MinStopLossATRMultiplier*myATR) 
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", Stop);
+              if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
             }
             else if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
             {
               Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", Stop);
+              if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
             }
           }
         }
