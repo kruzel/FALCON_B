@@ -1007,6 +1007,12 @@ int start()
       }
     }
 
+    if(Take==0)
+    {
+      if(OnJournaling) Print("Take profit 0, no new trades will be opened.");
+      return (0);
+    }
+
 // ---------- positions processing ----------
   // TODO: if IsPinBar then open limit order above / below pinbar high / low
 
@@ -2968,8 +2974,7 @@ double CalculateTakeProfit()
           Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
           if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point))
           {
-            if(OnJournaling) Print("Take Profit is too close or above to supply zone, canceling signal");
-            Trigger = 0; //Cancel signal
+            if(OnJournaling) Print("Take Profit is too close or above to supply zone");
           }
         }
         
@@ -2981,8 +2986,7 @@ double CalculateTakeProfit()
         Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
         if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point)) // Ensure Take is not too small
         {
-          if(OnJournaling) Print("Take Profit is too close or below to demand zone, canceling signal");
-          Trigger = 0; //Cancel signal
+          if(OnJournaling) Print("Take Profit is too close or below to demand zone");
         }
       }
     }
