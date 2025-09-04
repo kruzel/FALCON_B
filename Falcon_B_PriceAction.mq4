@@ -523,7 +523,6 @@ int start()
     if(lastOpenOrder != newOpenOrder)
     {
       lastOpenOrder = newOpenOrder;
-      // UpdateStopLossTakeProfitAll(OnJournaling,RetryInterval,MagicNumber,PipFactor);
       SaveChart();
     }
 
@@ -925,6 +924,14 @@ int start()
         }
       }
 
+      if((prev_ner_hi_zone_P1 != ner_hi_zone_P1) ||
+          (prev_ner_hi_zone_P2 != ner_hi_zone_P2) ||
+          (prev_ner_lo_zone_P1 != ner_lo_zone_P1) ||
+          (prev_ner_lo_zone_P2 != ner_lo_zone_P2))
+      {
+        UpdateStopLossTakeProfitAll(OnJournaling,RetryInterval,MagicNumber,PipFactor);
+      } 
+
       prev_ner_hi_zone_P1 = ner_hi_zone_P1;
       prev_ner_hi_zone_P2 = ner_hi_zone_P2;
       prev_ner_lo_zone_P1 = ner_lo_zone_P1;
@@ -933,8 +940,8 @@ int start()
 
 //----------Stop loss and Take Profit calculation for new trades -----------
 
-    Stop = CalculateStopLoss();
-    Take = CalculateTakeProfit();
+    Stop = CalculateStopLoss(Ask);
+    Take = CalculateTakeProfit(Ask);
 
 //----------Exit Rules (All Opened Positions)-----------
    // TDL 2: Setting up Exit rules. Modify the ExitSignal() function to suit your needs.
@@ -2332,41 +2339,68 @@ void TrailingStopAll(bool Journaling,double TrailingStopDist,double TrailingStop
 //+------------------------------------------------------------------+
 //| Update Stop and take profit levels for all positions
 //+------------------------------------------------------------------+
-
-void UpdateStopLossTakeProfitAll(bool Journaling,int Retry_Interval,int Magic,int K)
-  {
-// Type: Fixed Template 
-// Do not edit unless you know what you're doing 
-
-// This function sets trailing stops for all positions
-
-   for(int i=OrdersTotal()-1; i>=0; i--) // Looping through all orders
-     {
-      bool Modify=false;
-      if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic)
+  void UpdateStopLossTakeProfitAll(bool Journaling,int Retry_Interval,int Magic,int K)
+{
+    // Only update if we have an active trigger and valid zones
+    if(Trigger <= 0) return;
+    
+    for(int i=OrdersTotal()-1; i>=0; i--) // Looping through all orders
+    {
+        bool Modify=false;
+        if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic)
         {
-         RefreshRates();
-         Stop = CalculateStopLoss();
-         Take = CalculateTakeProfit();
-          if(OrderType()==OP_BUY && (Bid-OrderStopLoss()!=Stop*K*Point || OrderStopLoss()==0))
+            RefreshRates();
+            double currentStop = OrderStopLoss();
+            double currentTake = OrderTakeProfit();
+            int position = 0;
+            if(OrderType()==OP_BUY) position = 1;
+            else if(OrderType()==OP_SELL) position = 2;
+            else continue; // Skip non-market orders
+
+            // Calculate new levels using current order's open price
+            double newStopPips = UpdateStopLoss(OrderOpenPrice(), position);
+            double newTakePips = UpdateTakeProfit(OrderOpenPrice(), position);
+            
+            double newStopPrice = 0;
+            double newTakePrice = 0;
+            
+            if(OrderType() == OP_BUY)
             {
-              if(Journaling)Print("Trying to modify order "+(string)OrderTicket()+" ...");
-              HandleTradingEnvironment(Journaling,Retry_Interval);
-              Modify=OrderModify(OrderTicket(),OrderOpenPrice(),Bid-Stop*K*Point,Bid+Take*K*Point,0,CLR_NONE);
-              if(Journaling && !Modify)Print("Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
-              if(Journaling && Modify)Print("Order successfully modified, stop loss and take profit changed.");
+                newStopPrice = OrderOpenPrice() - newStopPips*K*Point;
+                newTakePrice = OrderOpenPrice() + newTakePips*K*Point;
             }
-         if(OrderType()==OP_SELL && ((OrderStopLoss()-Ask!=Stop*K*Point) || (OrderStopLoss()==0)))
-           {
-            if(Journaling)Print("Trying to modify order "+(string)OrderTicket()+" ...");
-            HandleTradingEnvironment(Journaling,Retry_Interval);
-            Modify=OrderModify(OrderTicket(),OrderOpenPrice(),Ask+Stop*K*Point,Ask-Take*K*Point,0,CLR_NONE);
-            if(Journaling && !Modify)Print("Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
-            if(Journaling && Modify)Print("Order successfully modified, stop loss and take profit changed.");
-           }
+            else if(OrderType() == OP_SELL)
+            {
+                newStopPrice = OrderOpenPrice() + newStopPips*K*Point;
+                newTakePrice = OrderOpenPrice() - newTakePips*K*Point;
+            }
+            
+            // Only modify if there's a meaningful change (avoid small rounding differences)
+            double stopDiff = MathAbs(currentStop - newStopPrice);
+            double takeDiff = MathAbs(currentTake - newTakePrice);
+            double minChange = Point * K; // Minimum change threshold
+            
+            if(stopDiff > minChange || takeDiff > minChange)
+            {
+                if(OrderType() == OP_BUY)
+                {
+                    if(Journaling) Print("Updating order ", OrderTicket(), " SL: ", currentStop, "->", newStopPrice, " TP: ", currentTake, "->", newTakePrice);
+                    HandleTradingEnvironment(Journaling,Retry_Interval);
+                    Modify = OrderModify(OrderTicket(),OrderOpenPrice(),newStopPrice,newTakePrice,0,CLR_NONE);
+                }
+                else if(OrderType() == OP_SELL)
+                {
+                    if(Journaling) Print("Updating order ", OrderTicket(), " SL: ", currentStop, "->", newStopPrice, " TP: ", currentTake, "->", newTakePrice);
+                    HandleTradingEnvironment(Journaling,Retry_Interval);
+                    Modify = OrderModify(OrderTicket(),OrderOpenPrice(),newStopPrice,newTakePrice,0,CLR_NONE);
+                }
+                
+                if(Journaling && !Modify) Print("Unexpected Error has happened. Error Description: "+GetErrorDescription(GetLastError()));
+                if(Journaling && Modify) Print("Order successfully modified, stop loss and take profit updated.");
+            }
         }
-     }
-  }
+    }
+}
 //+------------------------------------------------------------------+
 //| End Update Stop and take profit levels for all positions
 //+------------------------------------------------------------------+
@@ -2860,7 +2894,7 @@ void TriggerAndReviewHiddenVolTrailing(bool Journaling, double VolTrailingDistMu
 //+------------------------------------------------------------------+
 //| CalculateStopLoss                                                |
 //+------------------------------------------------------------------+
-double CalculateStopLoss()
+double CalculateStopLoss(double price)
   {
    if(UseFixedStopLoss==True) 
     {
@@ -2934,15 +2968,30 @@ double CalculateStopLoss()
       Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
     }
 
+    Stop = UpdateStopLoss(price, Trigger);
+
+   return(Stop);
+  }
+
+//+------------------------------------------------------------------+
+//| CalculateStopLoss                                      
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| End of Trigger and Review Hidden Volatility Trailing Stop
+//+------------------------------------------------------------------+
+//| UpdateStopLoss                                                |
+//+------------------------------------------------------------------+
+double UpdateStopLoss(double price, int position)
+  {
     // check if Stop is close to supply or demand zone, not in breakout
-    if((UseSupplyDemandPoints || UseSupplyDemandATR) && Trigger > 0)
+    if((UseSupplyDemandPoints || UseSupplyDemandATR))
     {
-      if(Trigger==1)
+      if(position==1)
       {
-        if(Ask - Stop*(PipFactor*Point) < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
+        if(price - Stop*(PipFactor*Point) < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
         {
           // double prvStop = Stop;
-          Stop = (Ask - prev_ner_lo_zone_P2 + StopLossMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Stop Profit to be below the demand zone to stop on breakout
+          Stop = (price - prev_ner_lo_zone_P2 + StopLossMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Stop Profit to be below the demand zone to stop on breakout
           // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
           if(Stop < MinStopLossATRMultiplier*myATR/(PipFactor*Point)) // Ensure Stop is not too small
           {
@@ -2951,12 +3000,12 @@ double CalculateStopLoss()
             if(OnJournaling) Print("Stop Profit is too close or below to demand zone, canceling signal");
           }
         }
-      } else if(Trigger==2)
+      } else if(position==2)
       {
-        if(Ask + Stop*(PipFactor*Point) > prev_ner_hi_zone_P2) //P2 is the lower bound of the supply zone
+        if(price + Stop*(PipFactor*Point) > prev_ner_hi_zone_P2) //P2 is the lower bound of the supply zone
         {
           // double prvStop = Stop;
-          Stop = (prev_ner_hi_zone_P1 - Ask + StopLossMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the supply zone to stop on breakout
+          Stop = (prev_ner_hi_zone_P1 - price + StopLossMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the supply zone to stop on breakout
           // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
           if(Stop < MinStopLossATRMultiplier*myATR/(PipFactor*Point))
           {
@@ -2973,12 +3022,12 @@ double CalculateStopLoss()
   }
 
 //+------------------------------------------------------------------+
-//| CalculateStopLoss                                      
+//| UpdateStopLoss                                      
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
 //| CalculateTakeProfit                                                                                     
 //+------------------------------------------------------------------+
-double CalculateTakeProfit()
+double CalculateTakeProfit(double price)
   {
    if(UseFixedTakeProfit==True) 
     {
@@ -3001,15 +3050,27 @@ double CalculateTakeProfit()
       Take = 0.5 * Take;
     }
 
+    Take = UpdateTakeProfit(price, Trigger);
+
+   return(Take);
+  }
+//+------------------------------------------------------------------+
+//| CalculateTakeProfit                                                                                     
+//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| UpdateTakeProfit                                                                                     
+//+------------------------------------------------------------------+
+double UpdateTakeProfit(double price, int position)
+  {
     // check if Take is close to supply or demand zone, not in breakout
-    if((UseSupplyDemandPoints || UseSupplyDemandATR) && Trigger > 0)
+    if((UseSupplyDemandPoints || UseSupplyDemandATR))
     {
-      if(Trigger==1)
+      if(position==1)
       {
-        if(Ask + Take*(PipFactor*Point) + TakeProfitMarginATRMultiplier * myATR > prev_ner_hi_zone_P2) //P2 is the lower bound of the supply zone
+        if(price + Take*(PipFactor*Point) + TakeProfitMarginATRMultiplier * myATR > prev_ner_hi_zone_P2) //P2 is the lower bound of the supply zone
         {
-          double prvTake = Take;
-          Take = (prev_ner_hi_zone_P2 - Ask - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
+          // double prvTake = Take;
+          Take = (prev_ner_hi_zone_P2 - price - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be below the supply zone
           // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
           if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point))
           {
@@ -3020,12 +3081,12 @@ double CalculateTakeProfit()
         }
         
       } 
-      else if(Trigger==2)
+      else if(position==2)
       {
-        if(Ask - Take*(PipFactor*Point) - TakeProfitMarginATRMultiplier * myATR < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
+        if(price - Take*(PipFactor*Point) - TakeProfitMarginATRMultiplier * myATR < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
         {
-          double prvTake = Take;
-          Take = (Ask - prev_ner_lo_zone_P1 - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the demand zone
+          // double prvTake = Take;
+          Take = (price - prev_ner_lo_zone_P1 - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the demand zone
           // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
           if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point)) // Ensure Take is not too small
           {
@@ -3040,7 +3101,7 @@ double CalculateTakeProfit()
    return(Take);
   }
 //+------------------------------------------------------------------+
-//| CalculateTakeProfit                                                                                     
+//| UpdateTakeProfit                                                                                     
 //+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
 //| Calculate Arears Money Management Risk Size                      |
@@ -3482,6 +3543,6 @@ void SaveChart()
   if(!success)
   {
     int error = GetLastError();
-    Print("Screenshot failed. Error: ", error, " - ", GetErrorDescription(error));
+    Print("Screenshot failed. Error: ", error, " - ", GetErrorDescription(error), " filename: ", filename);
   }
 }
