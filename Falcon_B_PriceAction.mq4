@@ -84,6 +84,8 @@ extern bool    UseFixedStopLoss                 = False; // Fixed size stop loss
 extern double  FixedStopLoss                    = 0; // Hard Stop in Pips. Will be overridden if vol-based SL is true 
 extern bool    IsVolatilityStopOn               = False;
 extern double  VolBasedSLMultiplier             = 2; // Stop Loss Amount in units of Volatility
+extern double  StopLossMarginATRMultiplier      = 0.5; // Stop Loss margin ATR Multiplier
+
 
 extern bool    UseFixedTakeProfit               = False; // Fixed size take profit
 extern double  FixedTakeProfit                  = 0; // Hard Take Profit in Pips. Will be overridden if vol-based TP is true 
@@ -931,7 +933,7 @@ int start()
 
 //----------Stop loss and Take Profit calculation for new trades -----------
 
-    Stop = CalculateStopLoss(PipFactor);
+    Stop = CalculateStopLoss();
     Take = CalculateTakeProfit();
 
 //----------Exit Rules (All Opened Positions)-----------
@@ -2344,7 +2346,7 @@ void UpdateStopLossTakeProfitAll(bool Journaling,int Retry_Interval,int Magic,in
       if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==true && OrderSymbol()==Symbol() && OrderMagicNumber()==Magic)
         {
          RefreshRates();
-         Stop = CalculateStopLoss(K);
+         Stop = CalculateStopLoss();
          Take = CalculateTakeProfit();
           if(OrderType()==OP_BUY && (Bid-OrderStopLoss()!=Stop*K*Point || OrderStopLoss()==0))
             {
@@ -2858,7 +2860,7 @@ void TriggerAndReviewHiddenVolTrailing(bool Journaling, double VolTrailingDistMu
 //+------------------------------------------------------------------+
 //| CalculateStopLoss                                                |
 //+------------------------------------------------------------------+
-double CalculateStopLoss(int K)
+double CalculateStopLoss()
   {
    if(UseFixedStopLoss==True) 
     {
@@ -2932,6 +2934,41 @@ double CalculateStopLoss(int K)
       Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
     }
 
+    // check if Stop is close to supply or demand zone, not in breakout
+    if((UseSupplyDemandPoints || UseSupplyDemandATR) && Trigger > 0)
+    {
+      if(Trigger==1)
+      {
+        if(Ask - Stop*(PipFactor*Point) < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
+        {
+          // double prvStop = Stop;
+          Stop = (Ask - prev_ner_lo_zone_P2 + StopLossMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Stop Profit to be below the demand zone to stop on breakout
+          // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
+          if(Stop < MinStopLossATRMultiplier*myATR/(PipFactor*Point)) // Ensure Stop is not too small
+          {
+            Stop = 0;
+            Trigger = 0;
+            if(OnJournaling) Print("Stop Profit is too close or below to demand zone, canceling signal");
+          }
+        }
+      } else if(Trigger==2)
+      {
+        if(Ask + Stop*(PipFactor*Point) > prev_ner_hi_zone_P2) //P2 is the lower bound of the supply zone
+        {
+          // double prvStop = Stop;
+          Stop = (prev_ner_hi_zone_P1 - Ask + StopLossMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the supply zone to stop on breakout
+          // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
+          if(Stop < MinStopLossATRMultiplier*myATR/(PipFactor*Point))
+          {
+            Stop = 0;
+            Trigger = 0;
+            if(OnJournaling) Print("Stop Profit is too close or above to supply zone, canceling signal");
+          }
+        }
+        
+      } 
+    }
+
    return(Stop);
   }
 
@@ -2978,21 +3015,24 @@ double CalculateTakeProfit()
           {
             Take = 0;
             Trigger = 0;
-            if(OnJournaling) Print("Take Profit is too close or above to supply zone");
+            if(OnJournaling) Print("Take Profit is too close or above to supply zone, canceling signal");
           }
         }
         
       } 
-      else if(Bid - Take*(PipFactor*Point) - TakeProfitMarginATRMultiplier * myATR < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
+      else if(Trigger==2)
       {
-        double prvTake = Take;
-        Take = (Bid - prev_ner_lo_zone_P1 - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the demand zone
-        // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
-        if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point)) // Ensure Take is not too small
+        if(Ask - Take*(PipFactor*Point) - TakeProfitMarginATRMultiplier * myATR < prev_ner_lo_zone_P1) // P1 is the upper bound of the demand zone
         {
-          Take = 0;
-          Trigger = 0;
-          if(OnJournaling) Print("Take Profit is too close or below to demand zone");
+          double prvTake = Take;
+          Take = (Ask - prev_ner_lo_zone_P1 - TakeProfitMarginATRMultiplier * myATR)/(PipFactor*Point); // Adjust Take Profit to be above the demand zone
+          // Print("Take Profit is close to demand zone, Take: ", Take*(PipFactor*Point), " prvTake: ", prvTake*(PipFactor*Point), " ATR: ", myATR);
+          if(Take < TakeProfitMarginATRMultiplier*myATR/(PipFactor*Point) && Take < MinTakeProfitATRMultiplier*myATR/(PipFactor*Point)) // Ensure Take is not too small
+          {
+            Take = 0;
+            Trigger = 0;
+            if(OnJournaling) Print("Take Profit is too close or below to demand zone, canceling signal");
+          }
         }
       }
     }
