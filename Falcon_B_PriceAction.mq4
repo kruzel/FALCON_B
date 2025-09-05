@@ -533,14 +533,29 @@ int start()
       lastOrder = newClosedOrder;
       SaveChart();
 
-      double price;
-      double profit;
-      int type;
-      int order;
-      datetime time;
-      CloseReason closeReason;
-      if(GetLastProfit(MagicNumber, order, time, profit, type, price, closeReason, Symbol()))
+      // Select the newly closed order for further processing
+      if(OrderSelect(newClosedOrder, SELECT_BY_TICKET))
       {
+        datetime time = OrderCloseTime();
+        double profit = OrderProfit();
+        int type = OrderType();
+        double price = OrderClosePrice();
+
+        // Get the close reason
+        CloseReason closeReason;
+        if(OrderProfit() < 0 && MathAbs(OrderClosePrice() - OrderStopLoss()) < Point)
+        {
+              closeReason = StopLoss;
+        }
+        else if(OrderProfit() > 0 && MathAbs(OrderClosePrice() - OrderTakeProfit()) < Point)
+        {
+              closeReason = TakeProfit;
+        }
+        else
+        {
+              closeReason = Manual;
+        }
+
         // Compare hours and minutes of time with Time[0]
         int timeHour = TimeHour(time);
         int timeMinute = TimeMinute(time);
@@ -924,13 +939,14 @@ int start()
         }
       }
 
-      if((prev_ner_hi_zone_P1 != ner_hi_zone_P1) ||
-          (prev_ner_hi_zone_P2 != ner_hi_zone_P2) ||
-          (prev_ner_lo_zone_P1 != ner_lo_zone_P1) ||
-          (prev_ner_lo_zone_P2 != ner_lo_zone_P2))
-      {
-        UpdateStopLossTakeProfitAll(OnJournaling,RetryInterval,MagicNumber,PipFactor);
-      } 
+      // if(((prev_ner_hi_zone_P1 != ner_hi_zone_P1) ||
+      //     (prev_ner_hi_zone_P2 != ner_hi_zone_P2) ||
+      //     (prev_ner_lo_zone_P1 != ner_lo_zone_P1) ||
+      //     (prev_ner_lo_zone_P2 != ner_lo_zone_P2)) &&
+      //    (ner_hi_zone_P1 !=999999 && ner_hi_zone_P2 !=999999 && ner_lo_zone_P1 != 0 && ner_lo_zone_P2 != 0))
+      // {
+      //   UpdateStopLossTakeProfitAll(OnJournaling,RetryInterval,MagicNumber,PipFactor);
+      // } 
 
       prev_ner_hi_zone_P1 = ner_hi_zone_P1;
       prev_ner_hi_zone_P2 = ner_hi_zone_P2;
@@ -2356,7 +2372,7 @@ void TrailingStopAll(bool Journaling,double TrailingStopDist,double TrailingStop
             if(OrderType()==OP_BUY) position = 1;
             else if(OrderType()==OP_SELL) position = 2;
             else continue; // Skip non-market orders
-
+            
             // Calculate new levels using current order's open price
             double newStopPips = UpdateStopLoss(OrderOpenPrice(), position);
             double newTakePips = UpdateTakeProfit(OrderOpenPrice(), position);
@@ -2917,21 +2933,17 @@ double CalculateStopLoss(double price)
               break;
             }
           }
-          
-          // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
-          // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
+
+          // Print("Initial Stop: ", NormalizeDouble(Stop,1), " MinStopLoss: ", NormalizeDouble(MinStopLossATRMultiplier*myATR /(PipFactor*Point),1), " MaxStopLoss: ", NormalizeDouble(MaxStopLossATRMultiplier*myATR /(PipFactor*Point),1));
+          if(Stop*(PipFactor*Point)<MinStopLossATRMultiplier*myATR) 
           {
-            if(Stop*(PipFactor*Point)<MinStopLossATRMultiplier*myATR) 
-            {
-              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
-            } 
-            else if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
-            {
-              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
-            }
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+            if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
+          } 
+          else if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
+          {
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+            if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
           }
         } 
         else if(Trigger==2) 
@@ -2947,20 +2959,16 @@ double CalculateStopLoss(double price)
             }
           }
 
-          // if(OnJournaling) Print("Stop: ", Stop, " StopBarMargin: ", StopBarMargin);
-          // if(!lastOrderClosedByStopLoss) // skip check if last order closed by stop loss
-          // Print("Initial Stop: ", Stop, " MinStopLoss: ", MinStopLoss);
+          // Print("Initial Stop: ", NormalizeDouble(Stop,1), " MinStopLoss: ", NormalizeDouble(MinStopLossATRMultiplier*myATR /(PipFactor*Point),1), " MaxStopLoss: ", NormalizeDouble(MaxStopLossATRMultiplier*myATR /(PipFactor*Point),1));
+          if(Stop*(PipFactor*Point)<MinStopLossATRMultiplier*myATR) 
           {
-            if(Stop*(PipFactor*Point)<MinStopLossATRMultiplier*myATR) 
-            {
-              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
-            }
-            else if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
-            {
-              Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
-              if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
-            }
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+            if(OnJournaling) Print("Stop too small, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
+          }
+          else if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
+          {
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+            if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
           }
         }
     } else
@@ -2968,7 +2976,8 @@ double CalculateStopLoss(double price)
       Stop=VolBasedStopLoss(IsVolatilityStopOn,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
     }
 
-    Stop = UpdateStopLoss(price, Trigger);
+    // if(!lastOrderClosedByStopLoss) // && !IsPinBar
+    //   Stop = UpdateStopLoss(price, Trigger);
 
    return(Stop);
   }
@@ -3050,7 +3059,8 @@ double CalculateTakeProfit(double price)
       Take = 0.5 * Take;
     }
 
-    Take = UpdateTakeProfit(price, Trigger);
+    // if(!lastOrderClosedByStopLoss) //  && !IsPinBar
+    //   UpdateTakeProfit(price, Trigger);
 
    return(Take);
   }
@@ -3131,7 +3141,7 @@ double CalculateArearsRisk()
 
     int consecutiveLosses = 0;
     double lossAmount = GetConsecutiveLossAmount(MagicNumber, consecutiveLosses);
-    double profitToday = GetProfitToday(MagicNumber, Symbol());
+    double totalProfit = GetTotalProfit(MagicNumber, Symbol());
     double sumProfitFromLoss = GetSumProfitSinceLoss(MagicNumber, Symbol());
     double accountBalance = AccountBalance();
     double dailyTarget = Risk * accountBalance / 100; // Target profit in currency
@@ -3176,7 +3186,8 @@ double CalculateArearsRisk()
 
     if(OnJournaling)
     {             
-      string csvFileName = "AreasManagement_" + Symbol() + "_" + TimeToString(TimeCurrent(), TIME_DATE) + ".csv";
+      // string csvFileName = "AreasManagement_" + Symbol() + "_" + TimeToString(TimeCurrent(), TIME_DATE) + ".csv";
+      string csvFileName = "AreasManagement_" + Symbol() + ".csv";
       int csvHandle = FileOpen(csvFileName, FILE_CSV | FILE_WRITE | FILE_READ);
       
       if(csvHandle != INVALID_HANDLE)
@@ -3184,7 +3195,7 @@ double CalculateArearsRisk()
           // Check if file is empty and add header if needed
           if(FileSize(csvHandle) == 0)
           {
-          FileWrite(csvHandle, "Time,Symbol,Risk%,Result,Profit,Accumulated_Profit,Arear, accountBalance");
+          FileWrite(csvHandle, "Date,Time,Symbol,Risk%,Result,Profit,Accumulated_Profit,Arear, accountBalance");
           }
           
           // Move to end of file to append
@@ -3193,15 +3204,16 @@ double CalculateArearsRisk()
           string res = (profit < 0) ? "Loss" : "Win";
           
           // Write data row
-          string csvRow = TimeToString(TimeCurrent(), TIME_DATE | TIME_MINUTES) + "," +
+          string csvRow = TimeToString(TimeCurrent(), TIME_DATE) + "," +
+                TimeToString(TimeCurrent(), TIME_MINUTES) + "," +
                 Symbol() + "," +
                 DoubleToString(UpdatedRisk, 2) + "," +
                 res + "," +
                 DoubleToString(profit, 2) + "," +
-                DoubleToString(profitToday, 2) + "," +
+                DoubleToString(totalProfit, 2) + "," +
                 DoubleToString(arears, 2) + "," +
                 DoubleToString(accountBalance, 2);
-                                ;
+                                
           FileWrite(csvHandle, csvRow);
           FileClose(csvHandle);
       }
