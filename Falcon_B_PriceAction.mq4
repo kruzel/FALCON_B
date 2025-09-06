@@ -10,6 +10,7 @@
 // #property link      "https://vladdsm.github.io/myblog_attempt/"
 #property version   "1.0"  
 #property strict
+
 /* 
 
 Falcon B: 
@@ -184,7 +185,6 @@ extern double  MeanReversalLoHiDistance         = 5;    // Mean Reversal Low-Hig
 #include <Falcon_B_Include/SupportResistance.mqh>
 #include <Falcon_B_Include/PinBarDetector.mqh>
 #include <Falcon_B_Include/TradingControl.mqh>
-#include <Falcon_B_Include/02_OrderProfitToCSV.mqh>
 
 string  InternalHeader1="----------Errors Handling Settings-----------";
 int     RetryInterval                           = 100; // Pause Time before next retry (in milliseconds)
