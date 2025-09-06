@@ -4,7 +4,7 @@
 //|                                             okruzel@gmail.com
 //+------------------------------------------------------------------+
 
-#property copyright "Copyright 2025, Black Algo Technologies Pte Ltd"
+#property copyright "Copyright 2025, Trading Technologies Ltd"
 #property copyright "Copyright 2025, Ofer Kruzel"
 #property link      "okruzel@gmail.com"
 // #property link      "https://vladdsm.github.io/myblog_attempt/"
@@ -16,7 +16,7 @@ Falcon B:
 - Adding specific functions to manage Decision Support System
 
 */
-cd
+
 //+------------------------------------------------------------------+
 //| Setup                                               
 //+------------------------------------------------------------------+
