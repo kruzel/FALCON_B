@@ -16,7 +16,7 @@ Falcon B:
 - Adding specific functions to manage Decision Support System
 
 */
-
+cd
 //+------------------------------------------------------------------+
 //| Setup                                               
 //+------------------------------------------------------------------+
@@ -75,8 +75,8 @@ extern bool    UseBreakoutATR                   = True;
 extern double  BreakoutMarginATRMultiplier      = 0.2; // Breakout Distance (ATR Multiplier)
 
 extern string  Header4="----------TP & SL Settings-----------";
-extern bool    SlTpbyLastBar                    = True; // Use the last bar's high/low as Stop Loss
-extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
+extern bool    IsSlTpbyLastBarOn                = True; // Use the last bar's high/low as Stop Loss
+extern bool    IsSlTpbyMinATRAndBarOn           = False; // Use the last bar's high/low > Min ATR as Stop Loss
 extern double  MinStopLossATRMultiplier         = 1.2; // Min Stop Loss ATR multiplier
 extern double  MaxStopLossATRMultiplier         = 2; // Max Stop Loss ATR Multiplier
 extern double  StopBarMargin                    = 10; // stop loss margin (% bar size)
@@ -86,7 +86,7 @@ extern bool    IsVolatilityStopOn               = False;
 extern double  VolBasedSLMultiplier             = 2; // Stop Loss Amount in units of Volatility
 extern double  StopLossMarginATRMultiplier      = 0.5; // Stop Loss margin ATR Multiplier
 
-
+extern double  TpSlRatio                        = 1.0; // Take Profit to Stop Loss Ratio
 extern bool    UseFixedTakeProfit               = False; // Fixed size take profit
 extern double  FixedTakeProfit                  = 0; // Hard Take Profit in Pips. Will be overridden if vol-based TP is true 
 extern bool    IsVolatilityTakeProfitOn         = False;
@@ -2912,6 +2912,8 @@ void TriggerAndReviewHiddenVolTrailing(bool Journaling, double VolTrailingDistMu
 //+------------------------------------------------------------------+
 double CalculateStopLoss(double price)
   {
+   Stop = 0;
+   
    if(UseFixedStopLoss==True) 
     {
       if(Trigger==1) // Buy
@@ -2919,7 +2921,45 @@ double CalculateStopLoss(double price)
       else if(Trigger==2) // Sell
         Stop=FixedStopLoss; // Use Fixed Stop Loss in Pips
     }  
-    else if(SlTpbyLastBar==True) 
+    else if(IsSlTpbyLastBarOn==True) // find low/high of 2 bars or first one larger then min ATR
+    {
+      if(Trigger==1) // Buy
+        {
+          double min = Low[0];
+          for(int iBarIndex = 0; iBarIndex < 3; iBarIndex++)
+          {
+            double newmin = MathMin(Low[iBarIndex],Low[iBarIndex+1]);
+            if(newmin < min) min = newmin;
+            Stop=(Ask - min)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+            if(Ask - min > MinStopLossATRMultiplier * myATR)
+              break;
+          }
+
+          if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
+          {
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+            if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
+          }
+        } 
+        else if(Trigger==2) 
+        { 
+          double max = High[0];
+          for(int iBarIndex = 0; iBarIndex < 3; iBarIndex++)
+          {
+            double newmax = MathMax(High[iBarIndex],High[iBarIndex+1]);
+            if(newmax > max) max = newmax;
+            Stop=(max - Bid)/(PipFactor*Point) * (1+StopBarMargin/100); // Stop Loss in Pips
+            if(max - Bid > MinStopLossATRMultiplier * myATR)
+              break;
+          }
+
+          if(Stop*(PipFactor*Point)>MaxStopLossATRMultiplier*myATR && !lastOrderClosedByStopLoss && !IsPinBar) // If the stop is too large, use ATR
+          {
+            Stop=VolBasedStopLoss(True,FixedStopLoss,myATR,VolBasedSLMultiplier,PipFactor);
+            if(OnJournaling) Print("Stop is too large, using ATR for Stop Loss: ", NormalizeDouble(Stop, 1));
+          }
+        }
+    } else if(IsSlTpbyMinATRAndBarOn) // find first stop by bar low/high > min ATR
     {
       if(Trigger==1) // Buy
         {
@@ -3045,7 +3085,7 @@ double CalculateTakeProfit(double price)
       else if(Trigger==2) // Sell
         Take=FixedTakeProfit; // Use Fixed Take Profit in Pips
     }  
-    else if(SlTpbyLastBar==True) 
+    else if(IsSlTpbyLastBarOn==True) 
     {
        Take=Stop*TpSlRatio;
     }
