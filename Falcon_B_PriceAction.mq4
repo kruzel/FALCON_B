@@ -8,7 +8,7 @@
 #property copyright "Copyright 2025, Ofer Kruzel"
 #property link      "okruzel@gmail.com"
 // #property link      "https://vladdsm.github.io/myblog_attempt/"
-#property version   "1.0"  
+#property version   "2.0"  
 #property strict
 
 /* 
@@ -21,7 +21,7 @@ Falcon B:
 //+------------------------------------------------------------------+
 //| Setup                                               
 //+------------------------------------------------------------------+
-extern string  Version                           =  "1.0";                   
+extern string  Version                           =  "2.0";                   
 
 extern string  HeaderLicense="----------License Settings-----------";
 extern string  LicenseKey                       = "";       // License Key (Format: FALCON-XXXXX-XXXXX-XXXXX-XXXX)
